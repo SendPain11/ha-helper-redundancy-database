@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HA Helper · Cluster Database</title>
+<style>
+:root{
+  --bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#667085;--line:#e3e6ec;
+  --ok:#14804a;--ok-bg:#e6f4ec;--info:#2f5fb3;--info-bg:#e8eefb;--warn:#a15c00;--warn-bg:#fdf1de;--crit:#c0262d;--crit-bg:#fde8e8;
+  --accent:#2f5fb3;--code:#f0f2f5;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12151b;--panel:#1b1f27;--ink:#e6e8ec;--muted:#98a1b3;--line:#2b313c;
+  --ok:#4cc38a;--ok-bg:#16301f;--info:#7aa2f7;--info-bg:#1a2440;--warn:#f0b04a;--warn-bg:#352812;--crit:#ff6b6b;--crit-bg:#3a1a1c;
+  --accent:#7aa2f7;--code:#242a35;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:650}
+.pill{padding:3px 10px;border-radius:999px;font-weight:650;font-size:12px;letter-spacing:.3px}
+.l-ok{background:var(--ok-bg);color:var(--ok)}.l-info{background:var(--info-bg);color:var(--info)}
+.l-warn{background:var(--warn-bg);color:var(--warn)}.l-crit{background:var(--crit-bg);color:var(--crit)}
+.muted{color:var(--muted)}.sp{flex:1}
+nav{display:flex;gap:4px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:0;background:none;color:var(--muted);padding:10px 12px;font:inherit;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+main{padding:18px 20px;max-width:1280px;margin:0 auto}
+.tab{display:none}.tab.on{display:block}
+.grid{display:grid;gap:14px}.g3{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}.g2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px;font-weight:600}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.flow .box{border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--bg)}
+.flow .box b{display:block;font-size:14px}
+.flow .arr{color:var(--muted)}
+.node{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel);position:relative}
+.node.leader{border-color:var(--ok);box-shadow:inset 3px 0 0 var(--ok)}
+.node.down{border-color:var(--crit);box-shadow:inset 3px 0 0 var(--crit)}
+.node h3{margin:0;font-size:15px}.node .ip{color:var(--muted);font-size:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin-top:8px;font-size:13px}.kv span:nth-child(odd){color:var(--muted)}
+.badge{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.find{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}.find:last-child{border-bottom:0}
+.find .pill{flex:0 0 auto;align-self:flex-start;min-width:78px;text-align:center}
+.find .t{font-weight:600}.find .d{color:var(--muted);font-size:13px}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:12px;font-family:Consolas,ui-monospace,monospace;word-break:break-all}
+button.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.btn.sec{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+button.btn.red{background:var(--crit)}
+button.btn:disabled{opacity:.5;cursor:default}
+input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-width:280px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.big{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.ev{font-family:Consolas,ui-monospace,monospace;font-size:12.5px;max-height:340px;overflow:auto}
+.ev div{padding:3px 0;border-bottom:1px dashed var(--line)}
+.steps{margin:0;padding-left:20px}.steps li{margin:4px 0}
+.small{font-size:12px}
+.err{color:var(--crit);font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>HA Helper · Cluster Database</h1>
+  <span id="lvl" class="pill l-info">MEMUAT</span>
+  <span>Pemimpin: <b id="hdrLeader">-</b></span>
+  <span class="sp"></span>
+  <span class="muted small" id="upd">-</span>
+  <button class="btn sec" id="notifBtn" onclick="enableNotif()">Aktifkan notifikasi</button>
+</header>
+<nav id="nav">
+  <button data-t="ringkas" class="on">Ringkasan</button>
+  <button data-t="stream">Streaming &amp; Data</button>
+  <button data-t="uji">Uji Failover</button>
+  <button data-t="riwayat">Riwayat &amp; Peringatan</button>
+  <button data-t="atur">Pengaturan</button>
+</nav>
+<main>
+
+<section class="tab on" id="t-ringkas">
+  <div class="card" style="margin-bottom:14px"><h2>Jalur koneksi aplikasi</h2><div class="flow" id="flow"></div></div>
+  <div class="grid g3" id="nodes" style="margin-bottom:14px"></div>
+  <div class="grid g2">
+    <div class="card"><h2>Temuan</h2><div id="finds"></div></div>
+    <div class="grid" style="gap:14px">
+      <div class="card"><h2>etcd</h2><div id="etcd"></div></div>
+      <div class="card"><h2>HAProxy (dilihat dari tiap node)</h2><div id="hap"></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="tab" id="t-stream">
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><h2>Produksi</h2><div id="prod"></div></div>
+    <div class="card"><h2>Posisi tiap node terhadap produksi</h2><div id="behind"></div></div>
+  </div>
+  <div class="card">
+    <h2>Cek streaming &amp; data</h2>
+    <p class="muted small" style="margin-top:0">Menghitung data baru di produksi (rentang menit terakhir, berhenti 5 menit lalu), menunggu semua node
+      menyusul posisi produksi, lalu menghitung data yang sama lewat jalur tulis dan jalur baca cluster. Hanya membaca.</p>
+    <div class="row"><button class="btn" id="dcBtn" onclick="startDC()">Jalankan cek</button><span id="dcStep" class="muted"></span></div>
+    <div id="dcOut" style="margin-top:12px"></div>
+  </div>
+</section>
+
+<section class="tab" id="t-uji">
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card">
+      <h2>Perekam</h2>
+      <div class="row" style="margin-bottom:10px">
+        <input type="text" id="note" placeholder="Keterangan uji, mis. qm stop &lt;VMID&gt; node 1">
+        <button class="btn" id="recStart" onclick="recStart()">Mulai rekam</button>
+        <button class="btn red" id="recStop" onclick="recStop()" disabled>Selesai</button>
+      </div>
+      <div class="row" style="gap:28px">
+        <div><div class="muted small">Lama rekaman</div><div class="big" id="recDur">-</div></div>
+        <div><div class="muted small">Pemimpin sekarang</div><div class="big" id="recLeader">-</div></div>
+        <div><div class="muted small">Koneksi database</div><div class="big" id="recApp">-</div></div>
+      </div>
+      <div id="recTulis" class="small" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>Cara menguji</h2>
+      <ol class="steps small">
+        <li>Bila ada skrip pengembalian pemimpin otomatis (failback), nonaktifkan dulu bila ingin menguji tanpanya.</li>
+        <li>Tulis keterangan, tekan <b>Mulai rekam</b>.</li>
+        <li>Di host Proxmox: <code>qm stop &lt;VMID&gt;</code>, atau di node: <code>systemctl stop patroni</code>.</li>
+        <li>Tunggu pemimpin baru muncul. Nyalakan kembali node yang dimatikan.</li>
+        <li>Tunggu sampai keadaan stabil (bila menguji pengembalian, tunggu sampai pemimpin kembali), lalu tekan <b>Selesai</b>.</li>
+        <li>Unduh laporan untuk dilampirkan ke PM.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h2>Kejadian selama rekaman</h2><div class="ev" id="recEv"></div></div>
+    <div class="card"><h2>Laporan</h2><div id="recRep"></div></div>
+  </div>
+</section>
+
+<section class="tab" id="t-riwayat">
+  <div class="card">
+    <h2>Riwayat kejadian</h2>
+    <p class="muted small" style="margin-top:0">Tersimpan di folder <code>data</code>, tetap ada walau dashboard ditutup. Kejadian PERHATIAN/KRITIS dikirim lewat email
+      (bila diaktifkan di config.ini) dan notifikasi browser (bila diaktifkan).</p>
+    <table><thead><tr><th style="width:150px">Waktu</th><th style="width:100px">Level</th><th>Kejadian</th><th style="width:150px">Email</th></tr></thead><tbody id="hist"></tbody></table>
+  </div>
+</section>
+
+<section class="tab" id="t-atur">
+  <div class="grid g2">
+    <div class="card"><h2>Konfigurasi (dari config.ini, tanpa sandi)</h2><div id="cfg"></div></div>
+    <div class="card">
+      <h2>Peringatan</h2>
+      <p class="small">Email: <b id="mailState">-</b></p>
+      <div class="row"><button class="btn sec" onclick="testMail()">Kirim email uji</button><span id="mailRes" class="small"></span></div>
+      <p class="small" style="margin-top:14px">Notifikasi browser hanya muncul selama halaman ini terbuka. Email tetap terkirim selama jendela program masih berjalan.</p>
+      <div class="row"><button class="btn sec" onclick="testNotif()">Uji notifikasi browser</button></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const LV={ok:"AMAN",info:"INFO",warn:"PERHATIAN",crit:"KRITIS"};
+const ROLE={standby_leader:"Standby Leader",leader:"Leader",replica:"Replica",master:"Leader",primary:"Leader",sync_standby:"Sync Replica"};
+const fmtT=t=>t?new Date(t*1000).toLocaleTimeString("id-ID",{hour12:false}):"-";
+const fmtDT=t=>t?new Date(t*1000).toLocaleString("id-ID",{hour12:false}):"-";
+const pill=l=>`<span class="pill l-${l}">${LV[l]||l}</span>`;
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("on",x===b));
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="t-"+b.dataset.t));
+  try{localStorage.setItem("tab",b.dataset.t)}catch(e){}
+});
+try{const t=localStorage.getItem("tab");if(t)document.querySelector(`nav button[data-t="${t}"]`)?.click()}catch(e){}
+
+async function j(u,o){const r=await fetch(u,o);return r.json()}
+
+function renderStatus(d){
+  const s=d.state;if(!s){$("upd").textContent="menunggu putaran pertama...";return}
+  $("lvl").className="pill l-"+s.level;$("lvl").textContent=LV[s.level];
+  $("hdrLeader").textContent=s.leader||"TIDAK ADA";
+  $("upd").textContent=`diperbarui ${fmtT(s.time)} · ${s.poll_ms} ms`;
+  // jalur
+  const vips=Object.entries(s.vip||{});
+  const vipTxt=vips.length?vips.map(([v,h])=>`<div class="box">VIP ${esc(v)}<b>${esc(h||"?")}</b></div>`).join(""):'<div class="box">VIP<b class="muted">tidak diatur</b></div>';
+  $("flow").innerHTML=`<div class="box">Aplikasi masuk lewat<b>${esc(d.config.cluster_haproxy)}</b></div><span class="arr">→</span>${vipTxt}<span class="arr">→</span>
+    <div class="box">HAProxy :5432<b>/leader</b></div><span class="arr">→</span><div class="box">Pemimpin<b>${esc(s.leader||"TIDAK ADA")}</b></div>
+    ${s.paused?'<span class="pill l-warn">MODE PEMELIHARAAN</span>':""}`;
+  // node
+  $("nodes").innerHTML=s.nodes.map(n=>{
+    const lead=["leader","standby_leader","master","primary"].includes(n.role);
+    const down=!n.in_cluster;
+    const role=down?'<span class="badge l-crit">TIDAK DI CLUSTER</span>':`<span class="badge ${lead?"l-ok":"l-info"}">${esc(ROLE[n.role]||n.role||"?")}</span>`;
+    return `<div class="node ${lead?"leader":""} ${down?"down":""}"><h3>${esc(n.name)} ${role}</h3><div class="ip">${esc(n.ip)}${n.nofailover?' · <span class="badge l-warn">nofailover</span>':""}${d.config.pemimpin_utama===n.name?' · <span class="badge l-info">pemimpin utama</span>':""}</div>
+      <div class="kv"><span>Status</span><span>${esc(n.state||"-")}</span><span>Timeline</span><span>${esc(n.timeline??"-")}</span>
+      <span>Lag ke pemimpin</span><span>${lead?"-":(n.lag_mb??"-")+" MB"}</span>
+      <span>Tertinggal dari produksi</span><span>${n.behind_prod_mb==null?"-":n.behind_prod_mb+" MB"}</span>
+      <span>REST 8008</span><span>${n.reachable?"terjangkau":'<span class="err">tidak terjangkau</span>'}</span>
+      ${n.replay_paused?'<span>Replay</span><span class="err">DIJEDA</span>':""}</div></div>`}).join("");
+  // temuan
+  $("finds").innerHTML=d.findings.map(f=>`<div class="find">${pill(f.level)}<div><div class="t">${esc(f.area)} · ${esc(f.title)}</div>
+    ${f.detail?`<div class="d">${esc(f.detail)}</div>`:""}${f.action?`<div class="d">→ <code>${esc(f.action)}</code></div>`:""}</div></div>`).join("");
+  // etcd
+  const em=Object.entries(s.etcd.members);
+  $("etcd").innerHTML=`<p class="small" style="margin-top:0">Sehat <b>${s.etcd.healthy}/${s.etcd.total}</b> · pemimpin etcd: <b>${esc(s.etcd.leader||"?")}</b></p>
+   <table><thead><tr><th>Anggota</th><th>Status</th><th class="n">Raft term</th><th class="n">Raft index</th><th class="n">Ukuran</th></tr></thead><tbody>${
+   em.map(([n,m])=>`<tr><td>${esc(n)}${s.etcd.leader===n?' <span class="badge l-ok">pemimpin</span>':""}</td><td>${m.ok?(m.healthy?pill("ok"):pill("crit")):'<span class="muted">tidak terjangkau</span>'}</td>
+   <td class="n">${esc(m.raft_term??"-")}</td><td class="n">${esc(m.raft_index??"-")}</td><td class="n">${m.db_size?Math.round(m.db_size/1048576)+" MB":"-"}</td></tr>`).join("")}</tbody></table>`;
+  // haproxy
+  $("hap").innerHTML=`<table><thead><tr><th>Node</th><th>Jalur tulis (5432)</th><th>Jalur baca (5434)</th></tr></thead><tbody>${
+   Object.entries(s.haproxy).filter(([n])=>!n.startsWith("VIP")).map(([n,h])=>{
+     if(!h.ok)return `<tr><td>${esc(n)}</td><td colspan="2" class="err">${esc(h.error)}</td></tr>`;
+     const up=a=>a.filter(x=>(x.status||"").startsWith("UP")).map(x=>esc(x.name)).join(", ")||'<span class="err">TANPA SERVER</span>';
+     return `<tr><td>${esc(n)}</td><td>${up(h.tulis)}</td><td>${up(h.baca)}</td></tr>`}).join("")}</tbody></table>`;
+  // streaming tab
+  const p=s.produksi||{};
+  $("prod").innerHTML=p.off?'<span class="muted">Tidak diaktifkan di config.ini</span>':p.ok?
+    `<div class="kv"><span>Alamat</span><span>${esc(d.config.produksi)}</span><span>Posisi WAL</span><span><code>${esc(p.lsn)}</code></span>
+     <span>Mode</span><span>${p.recovery?"standby":"utama"}${p.read_only?' · <span class="badge l-warn">hanya-baca</span>':""}</span></div>`:
+    `<div class="err">Tidak tersambung: ${esc(p.error)}</div>`;
+  $("behind").innerHTML=`<table><thead><tr><th>Node</th><th>Peran</th><th class="n">Tertinggal</th><th>Transaksi terakhir diterapkan</th></tr></thead><tbody>${
+    s.nodes.map(n=>`<tr><td>${esc(n.name)}</td><td>${esc(ROLE[n.role]||n.role||"-")}</td><td class="n">${n.behind_prod_mb==null?"-":n.behind_prod_mb+" MB"}</td>
+    <td>${n.replayed_ts?esc(String(n.replayed_ts).slice(0,19)):"-"}</td></tr>`).join("")}</tbody></table>
+    <p class="muted small">Selisih kecil (beberapa MB) wajar saat produksi sibuk. Untuk ukuran pasti, pakai cek di bawah.</p>`;
+  // pengaturan
+  const c=d.config;
+  $("cfg").innerHTML=`<div class="kv"><span>Node database</span><span>${c.node_database.map(x=>esc(x[0]+" "+x[1])).join("<br>")}</span>
+   <span>Anggota etcd</span><span>${c.anggota_etcd.map(x=>esc(x[0]+" "+x[1])).join("<br>")}</span>
+   <span>VIP dipantau</span><span>${esc(c.vip.join(", ")||"-")}</span><span>Pemimpin utama</span><span>${esc(c.pemimpin_utama||"-")}</span>
+   <span>Produksi</span><span>${esc(c.produksi)}</span><span>Cluster (HAProxy)</span><span>${esc(c.cluster_haproxy)}</span>
+   <span>Database</span><span>${esc(c.database)}</span><span>Interval</span><span>${c.interval} detik</span><span>Batas lag</span><span>${c.batas_lag_mb} MB</span>
+   <span>Tabel cek data</span><span>${esc(c.tabel_cek_data.join(", "))} (${c.rentang_cek_data_menit} menit)</span></div>`;
+  $("mailState").textContent=c.email;
+}
+
+async function tick(){try{renderStatus(await j("/api/status"))}catch(e){$("upd").textContent="dashboard tidak menjawab"}}
+
+// ---------- riwayat + notifikasi
+let lastId=0,firstHist=true;
+async function hist(){
+  try{
+    const items=await j("/api/riwayat?sejak="+lastId);
+    if(items.length){
+      lastId=items[items.length-1].id;
+      if(!firstHist)items.filter(x=>x.level==="warn"||x.level==="crit").forEach(notify);
+      const rows=items.map(x=>`<tr><td>${fmtDT(x.time)}</td><td>${pill(x.level)}</td><td><b>${esc(x.title)}</b>${x.detail?`<div class="muted small">${esc(x.detail)}</div>`:""}</td><td class="small">${esc(x.email||"-")}</td></tr>`).reverse().join("");
+      $("hist").insertAdjacentHTML("afterbegin",rows);
+    }
+    firstHist=false;
+  }catch(e){}
+}
+function beep(){try{const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=880;g.gain.value=.08;o.start();setTimeout(()=>{o.stop();a.close()},350)}catch(e){}}
+function notify(x){beep();if("Notification"in window&&Notification.permission==="granted")new Notification(`[${LV[x.level]}] Cluster DB`,{body:x.title+(x.detail?"\n"+x.detail:"")})}
+function enableNotif(){if(!("Notification"in window))return alert("Browser ini tidak mendukung notifikasi.");Notification.requestPermission().then(p=>{$("notifBtn").textContent=p==="granted"?"Notifikasi aktif":"Notifikasi ditolak"})}
+function testNotif(){notify({level:"warn",title:"Uji notifikasi",detail:"Bila muncul, notifikasi browser berfungsi."})}
+if("Notification"in window&&Notification.permission==="granted")$("notifBtn").textContent="Notifikasi aktif";
+async function testMail(){$("mailRes").textContent="mengirim...";const r=await j("/api/email/uji",{method:"POST"});$("mailRes").textContent=r.hasil}
+
+// ---------- cek data
+async function startDC(){await j("/api/cekdata",{method:"POST"});pollDC()}
+async function pollDC(){
+  const r=await j("/api/cekdata");if(!r.status)return;
+  const run=r.status==="berjalan";$("dcBtn").disabled=run;
+  $("dcStep").textContent=run?"⏳ "+r.langkah+"...":(r.selesai?`selesai ${fmtT(r.selesai)}`:"");
+  if(run){setTimeout(pollDC,1500);return}
+  if(r.status==="gagal"){$("dcOut").innerHTML=`<div class="err">Gagal: ${esc(r.error)}</div>`;return}
+  const ok=r.beda===0&&r.semua_menyusul;
+  $("dcOut").innerHTML=`<p>${pill(ok?"ok":"warn")} <b>${esc(r.kesimpulan)}</b></p>
+   <p class="small muted">Rentang data: ${esc(r.rentang[0])} s/d ${esc(r.rentang[1])} · posisi produksi <code>${esc(r.lsn_produksi)}</code></p>
+   <table style="margin-bottom:12px"><thead><tr><th>Node</th><th>Menyusul posisi produksi dalam</th></tr></thead><tbody>${
+   Object.entries(r.menyusul).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${v==null?'<span class="err">TIDAK menyusul dalam 120 detik</span>':v+" detik"}</td></tr>`).join("")}</tbody></table>
+   <table><thead><tr><th>Tabel</th><th class="n">Produksi</th>${r.kolom.map(k=>`<th class="n">${esc(k.label)}<div class="muted">${esc(k.server||"gagal")}</div></th>`).join("")}<th>Hasil</th></tr></thead><tbody>${
+   r.baris.map(b=>`<tr><td>${esc(b.tabel)}</td><td class="n">${esc(b.produksi)}</td>${b.cluster.map(v=>`<td class="n">${esc(v??"-")}</td>`).join("")}<td>${pill(b.cocok?"ok":"warn").replace("AMAN","COCOK").replace("PERHATIAN","BEDA")}</td></tr>`).join("")}</tbody></table>
+   ${r.kolom.filter(k=>k.error).map(k=>`<div class="err">${esc(k.label)}: ${esc(k.error)}</div>`).join("")}`;
+}
+
+// ---------- perekam
+async function recStart(){await j("/api/rekam/mulai",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({catatan:$("note").value})});rec()}
+async function recStop(){$("recStop").disabled=true;await j("/api/rekam/selesai",{method:"POST"});rec()}
+async function rec(){
+  try{
+    const r=await j("/api/rekam");
+    $("recStart").disabled=r.aktif;$("recStop").disabled=!r.aktif;
+    const s=r.terakhir;
+    $("recDur").textContent=r.aktif&&r.mulai?Math.round(Date.now()/1000-r.mulai)+" dtk":"-";
+    $("recLeader").textContent=s?(s.leader===null?"TIDAK ADA":s.leader):"-";
+    $("recLeader").style.color=s&&s.leader===null?"var(--crit)":"";
+    $("recApp").textContent=s?(s.app?"OK":"GAGAL"):"-";$("recApp").style.color=s&&!s.app?"var(--crit)":"";
+    $("recTulis").innerHTML=s?"Jalur tulis di HAProxy tiap node: "+Object.entries(s.tulis).map(([n,v])=>`${esc(n)} <b style="color:${v==="UP"?"var(--ok)":"var(--crit)"}">${esc(v)}</b>`).join(" · "):"";
+    $("recEv").innerHTML=r.kejadian.map(e=>`<div>${fmtT(e.t)}  ${esc(e.teks)}</div>`).join("")||'<span class="muted">Belum ada rekaman.</span>';
+    const lr=r.laporan_terakhir;
+    $("recRep").innerHTML=(lr?`<p><b>Rekaman terakhir:</b> tanpa pemimpin <b>${lr.tanpa_pemimpin} dtk</b>, jalur tulis putus <b>${lr.tulis_putus} dtk</b>, koneksi gagal <b>${lr.koneksi_gagal} dtk</b></p>`:"")+
+      (r.daftar.length?"<ul class='small'>"+r.daftar.map(n=>`<li><a href="/api/laporan?nama=${encodeURIComponent(n)}">${esc(n)}</a></li>`).join("")+"</ul>":'<span class="muted">Belum ada laporan.</span>');
+    setTimeout(rec,r.aktif?1000:4000);
+  }catch(e){setTimeout(rec,4000)}
+}
+
+tick();hist();pollDC();rec();
+setInterval(tick,3000);setInterval(hist,3000);
+</script>
+</body>
+</html>

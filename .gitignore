@@ -1,0 +1,7 @@
+# konfigurasi & data milik masing-masing instalasi - JANGAN di-upload
+config.ini
+data/
+*.log
+__pycache__/
+*.pyc
+*.zip
