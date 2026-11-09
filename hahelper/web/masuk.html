@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk · HA Helper</title>
+<style>
+:root{--bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#667085;--line:#e3e6ec;--accent:#2f5fb3;--crit:#c0262d}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--panel:#1b1f27;--ink:#e6e8ec;--muted:#98a1b3;--line:#2b313c;--accent:#7aa2f7;--crit:#ff6b6b}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif;padding:16px}
+form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:26px 24px;width:100%;max-width:340px}
+h1{font-size:18px;margin:0 0 4px}p{margin:0 0 18px;color:var(--muted);font-size:13px}
+label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
+input{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+button{width:100%;margin-top:18px;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:10px;font:inherit;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6}
+#err{color:var(--crit);font-size:13px;margin-top:12px;min-height:18px}
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>HA Helper</h1>
+  <p>Dashboard cluster redundansi database</p>
+  <label for="u">Nama pengguna</label><input id="u" autocomplete="username" autofocus required>
+  <label for="p">Sandi</label><input id="p" type="password" autocomplete="current-password" required>
+  <button id="b">Masuk</button>
+  <div id="err"></div>
+</form>
+<script>
+document.getElementById("f").onsubmit=async e=>{
+  e.preventDefault();const b=document.getElementById("b"),er=document.getElementById("err");
+  b.disabled=true;er.textContent="";
+  try{
+    const r=await fetch("/api/masuk",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({pengguna:document.getElementById("u").value.trim(),sandi:document.getElementById("p").value})});
+    const d=await r.json();
+    if(r.ok){location.href="/";return}
+    er.textContent=d.error||"Gagal masuk.";
+  }catch(x){er.textContent="Dashboard tidak menjawab."}
+  b.disabled=false;
+};
+</script>
+</body>
+</html>

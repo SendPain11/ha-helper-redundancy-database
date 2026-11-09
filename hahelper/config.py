@@ -12,7 +12,7 @@ def _list(sec):
     return [(k, v.strip()) for k, v in sec.items()]
 
 
-def load(path, ask=True):
+def load(path, ask=True, store=None):
     cp = configparser.ConfigParser(interpolation=None, inline_comment_prefixes=(";",))
     cp.optionxform = str  # pertahankan huruf besar-kecil nama node
     with open(path, encoding="utf-8-sig") as f:
@@ -60,17 +60,37 @@ def load(path, ask=True):
     c.mail_to = [x.strip() for x in e.get("penerima", "").split(",") if x.strip()]
     c.mail_min = e.get("kirim_mulai_level", "warn")
 
-    if ask:
-        if c.stats_user and not c.stats_pass:
-            c.stats_pass = getpass.getpass("Sandi halaman statistik HAProxy (stats auth): ")
-        if c.prod_on and not c.prod_pass:
-            c.prod_pass = getpass.getpass(f"Sandi '{c.prod_user}' di PRODUKSI {c.prod_host}: ")
-        if not c.cl_pass:
-            c.cl_pass = c.prod_pass if (c.cl_same and c.prod_on) else getpass.getpass(
-                f"Sandi '{c.cl_user}' di CLUSTER {c.cl_host}: ")
-        if c.mail_on and c.mail_user and not c.mail_pass:
-            c.mail_pass = getpass.getpass(f"Sandi aplikasi email {c.mail_user}: ")
+    a = cp["akses"] if cp.has_section("akses") else {}
+    c.admin_user = (a.get("admin_pengguna") or "admin").strip()
+    c.admin_pass = (a.get("admin_sandi") or "").strip()
+    c.view_user = (a.get("lihat_pengguna") or "").strip()
+    c.view_pass = (a.get("lihat_sandi") or "").strip()
+
+    stored = store.load() if store else {}
+    for key, attr, label in secrets_needed(c):
+        if getattr(c, attr):
+            continue
+        if stored.get(key):
+            setattr(c, attr, stored[key])
+        elif ask:
+            setattr(c, attr, getpass.getpass(label + ": "))
+    if not c.cl_pass and c.cl_same:
+        c.cl_pass = c.prod_pass
     return c
+
+
+def secrets_needed(c):
+    """(kunci, atribut, pertanyaan) untuk sandi yang dikosongkan di config.ini."""
+    out = []
+    if c.stats_user:
+        out.append(("haproxy", "stats_pass", "Sandi halaman statistik HAProxy (stats auth)"))
+    if c.prod_on:
+        out.append(("produksi", "prod_pass", f"Sandi '{c.prod_user}' di PRODUKSI {c.prod_host}"))
+    if not (c.cl_same and c.prod_on):
+        out.append(("cluster", "cl_pass", f"Sandi '{c.cl_user}' di CLUSTER {c.cl_host}"))
+    if c.mail_on and c.mail_user:
+        out.append(("email", "mail_pass", f"Sandi aplikasi email {c.mail_user}"))
+    return out
 
 
 def public(c):

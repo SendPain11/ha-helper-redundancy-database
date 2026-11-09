@@ -15,3 +15,9 @@ cp config.contoh.ini config.ini     # lalu sesuaikan
 python jalankan.py                  # Windows: klik dua kali jalankan.bat
 python jalankan.py --cek            # cek sekali di layar
 ```
+
+## Versi 2
+- Login dua peran: **admin** (penuh) dan **lihat** (hanya melihat), diatur di `[akses]`
+- Bisa dibuka dari komputer lain lewat `http://<IP>:8099`
+- Windows: berjalan terus di latar (`simpan-sandi.bat`, lalu `pasang-jalan-terus.bat`),
+  sandi disimpan terenkripsi (DPAPI)

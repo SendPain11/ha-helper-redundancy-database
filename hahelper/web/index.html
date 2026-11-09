@@ -60,6 +60,9 @@ input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);bord
 .steps{margin:0;padding-left:20px}.steps li{margin:4px 0}
 .small{font-size:12px}
 .err{color:var(--crit);font-size:12.5px}
+body.viewer .adm{display:none!important}
+.onlyview{display:none}body.viewer .onlyview{display:block}
+#who{font-size:13px}
 </style>
 </head>
 <body>
@@ -70,6 +73,8 @@ input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);bord
   <span class="sp"></span>
   <span class="muted small" id="upd">-</span>
   <button class="btn sec" id="notifBtn" onclick="enableNotif()">Aktifkan notifikasi</button>
+  <span id="who" class="muted"></span>
+  <button class="btn sec" onclick="logout()">Keluar</button>
 </header>
 <nav id="nav">
   <button data-t="ringkas" class="on">Ringkasan</button>
@@ -101,7 +106,8 @@ input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);bord
     <h2>Cek streaming &amp; data</h2>
     <p class="muted small" style="margin-top:0">Menghitung data baru di produksi (rentang menit terakhir, berhenti 5 menit lalu), menunggu semua node
       menyusul posisi produksi, lalu menghitung data yang sama lewat jalur tulis dan jalur baca cluster. Hanya membaca.</p>
-    <div class="row"><button class="btn" id="dcBtn" onclick="startDC()">Jalankan cek</button><span id="dcStep" class="muted"></span></div>
+    <p class="onlyview muted small">Hanya admin yang bisa menjalankan cek. Hasil cek terakhir tampil di bawah.</p>
+    <div class="row adm"><button class="btn" id="dcBtn" onclick="startDC()">Jalankan cek</button><span id="dcStep" class="muted"></span></div>
     <div id="dcOut" style="margin-top:12px"></div>
   </div>
 </section>
@@ -110,7 +116,8 @@ input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);bord
   <div class="grid g2" style="margin-bottom:14px">
     <div class="card">
       <h2>Perekam</h2>
-      <div class="row" style="margin-bottom:10px">
+      <p class="onlyview muted small" style="margin-top:0">Hanya admin yang bisa memulai/menghentikan rekaman. Anda bisa melihat jalannya rekaman di sini.</p>
+      <div class="row adm" style="margin-bottom:10px">
         <input type="text" id="note" placeholder="Keterangan uji, mis. qm stop &lt;VMID&gt; node 1">
         <button class="btn" id="recStart" onclick="recStart()">Mulai rekam</button>
         <button class="btn red" id="recStop" onclick="recStop()" disabled>Selesai</button>
@@ -155,8 +162,8 @@ input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);bord
     <div class="card">
       <h2>Peringatan</h2>
       <p class="small">Email: <b id="mailState">-</b></p>
-      <div class="row"><button class="btn sec" onclick="testMail()">Kirim email uji</button><span id="mailRes" class="small"></span></div>
-      <p class="small" style="margin-top:14px">Notifikasi browser hanya muncul selama halaman ini terbuka. Email tetap terkirim selama jendela program masih berjalan.</p>
+      <div class="row adm"><button class="btn sec" onclick="testMail()">Kirim email uji</button><span id="mailRes" class="small"></span></div>
+      <p class="small" style="margin-top:14px">Bunyi dan notifikasi hanya muncul selama halaman ini terbuka. Pop-up Windows hanya bisa dari PC yang menjalankan program (alamat 127.0.0.1); dari komputer lain yang terdengar hanya bunyi. Email tetap terkirim selama program berjalan.</p>
       <div class="row"><button class="btn sec" onclick="testNotif()">Uji notifikasi browser</button></div>
     </div>
   </div>
@@ -178,7 +185,11 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
 });
 try{const t=localStorage.getItem("tab");if(t)document.querySelector(`nav button[data-t="${t}"]`)?.click()}catch(e){}
 
-async function j(u,o){const r=await fetch(u,o);return r.json()}
+async function j(u,o){const r=await fetch(u,o);if(r.status===401){location.href="/masuk";throw new Error("belum masuk")}return r.json()}
+let ROLE_ME="lihat";
+async function me(){const r=await j("/api/saya");ROLE_ME=r.peran;document.body.classList.toggle("viewer",r.peran!=="admin");
+  $("who").textContent=r.pengguna+(r.peran==="admin"?" (admin)":" (lihat saja)")}
+async function logout(){await fetch("/api/keluar",{method:"POST"});location.href="/masuk"}
 
 function renderStatus(d){
   const s=d.state;if(!s){$("upd").textContent="menunggu putaran pertama...";return}
@@ -255,10 +266,13 @@ async function hist(){
   }catch(e){}
 }
 function beep(){try{const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.frequency.value=880;g.gain.value=.08;o.start();setTimeout(()=>{o.stop();a.close()},350)}catch(e){}}
-function notify(x){beep();if("Notification"in window&&Notification.permission==="granted")new Notification(`[${LV[x.level]}] Cluster DB`,{body:x.title+(x.detail?"\n"+x.detail:"")})}
-function enableNotif(){if(!("Notification"in window))return alert("Browser ini tidak mendukung notifikasi.");Notification.requestPermission().then(p=>{$("notifBtn").textContent=p==="granted"?"Notifikasi aktif":"Notifikasi ditolak"})}
-function testNotif(){notify({level:"warn",title:"Uji notifikasi",detail:"Bila muncul, notifikasi browser berfungsi."})}
-if("Notification"in window&&Notification.permission==="granted")$("notifBtn").textContent="Notifikasi aktif";
+function notify(x){if(SOUND)beep();if(window.isSecureContext&&"Notification"in window&&Notification.permission==="granted")new Notification(`[${LV[x.level]}] Cluster DB`,{body:x.title+(x.detail?"\n"+x.detail:"")})}
+let SOUND=false;
+function enableNotif(){SOUND=true;beep();
+  if(!("Notification"in window)||!window.isSecureContext){$("notifBtn").textContent="Bunyi aktif";return}
+  Notification.requestPermission().then(p=>{$("notifBtn").textContent=p==="granted"?"Notifikasi aktif":"Bunyi aktif"})}
+function testNotif(){SOUND=true;notify({level:"warn",title:"Uji notifikasi",detail:"Bila muncul, notifikasi browser berfungsi."})}
+if(window.isSecureContext&&"Notification"in window&&Notification.permission==="granted")$("notifBtn").textContent="Notifikasi aktif (klik untuk bunyi)";
 async function testMail(){$("mailRes").textContent="mengirim...";const r=await j("/api/email/uji",{method:"POST"});$("mailRes").textContent=r.hasil}
 
 // ---------- cek data
@@ -300,7 +314,7 @@ async function rec(){
   }catch(e){setTimeout(rec,4000)}
 }
 
-tick();hist();pollDC();rec();
+me().then(()=>{tick();hist();pollDC();rec()});
 setInterval(tick,3000);setInterval(hist,3000);
 </script>
 </body>
