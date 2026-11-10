@@ -1,0 +1,31 @@
+[Unit]
+Description=HA Helper - dashboard cluster redundansi database (hanya membaca)
+After=network-online.target etcd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hahelper
+Group=hahelper
+WorkingDirectory=/opt/ha-helper
+ExecStart=/usr/bin/python3 /opt/ha-helper/jalankan.py --latar
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=10
+
+# Prioritas rendah agar etcd di witness ini tidak terganggu
+Nice=10
+IOSchedulingClass=idle
+CPUQuota=25%
+MemoryMax=256M
+
+# Pengamanan: hanya folder data yang boleh ditulis
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/opt/ha-helper/data
+
+[Install]
+WantedBy=multi-user.target

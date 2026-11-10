@@ -67,7 +67,8 @@ class Store:
     def save(self, values):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = self.path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # Linux: hanya pemilik yang bisa membaca
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump({k: _enc(v) for k, v in values.items() if v}, f, indent=1)
         os.replace(tmp, self.path)
 

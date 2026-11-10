@@ -57,7 +57,7 @@ def simpan_sandi(cfgpath, store):
     old = store.load()
     print("\nSIMPAN SANDI\n" + "-" * 50)
     print("Sandi disimpan " + ("terenkripsi (hanya bisa dibuka akun Windows ini di PC ini)."
-                               if store.encrypted() else "TANPA enkripsi (bukan Windows)."))
+                               if store.encrypted() else "di berkas yang hanya bisa dibaca pengguna ini (izin 600)."))
     print("Tekan Enter tanpa mengetik untuk memakai sandi yang sudah tersimpan.\n")
     vals = {}
     for key, attr, label in need:
@@ -67,7 +67,7 @@ def simpan_sandi(cfgpath, store):
         v = getpass.getpass(f"- {label}" + (" [tersimpan]" if old.get(key) else "") + ": ")
         vals[key] = v or old.get(key, "")
     store.save(vals)
-    print("\nTersimpan di data\\sandi.dat. Mencoba sambungan...\n")
+    print(f"\nTersimpan di {store.path}. Mencoba sambungan...\n")
     c = config.load(cfgpath, ask=False, store=store)
     if c.stats_user and c.db_nodes:
         try:
@@ -99,13 +99,14 @@ def main():
     a = ap.parse_args()
     os.makedirs(DATA, exist_ok=True)
     if a.latar or sys.stdout is None:
-        sys.stdout = sys.stderr = _Log(os.path.join(DATA, "helper.log"))
+        if not os.environ.get("INVOCATION_ID"):  # di bawah systemd: biarkan ke journalctl
+            sys.stdout = sys.stderr = _Log(os.path.join(DATA, "helper.log"))
         a.tanpa_browser = True
     else:
         _console_utf8()
-    print(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} HA Helper mulai ===", flush=True)
-
-    from hahelper import config, monitor, server
+    from hahelper import __version__, config, monitor, server
+    if not a.simpan_sandi and not a.cek:
+        print(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} HA Helper {__version__} mulai ===", flush=True)
     from hahelper.secret import Store
     if not os.path.exists(a.config):
         sys.exit(f"Berkas konfigurasi tidak ada: {a.config}")
@@ -118,7 +119,7 @@ def main():
     if a.latar:
         missing = [label for key, attr, label in config.secrets_needed(cfg) if not getattr(cfg, attr)]
         if missing:
-            print("Sandi belum disimpan: " + "; ".join(missing) + ". Jalankan simpan-sandi.bat dulu.", flush=True)
+            print("Sandi belum disimpan: " + "; ".join(missing) + (". Jalankan simpan-sandi.bat dulu." if os.name == "nt" else ". Jalankan: sudo ha-helper sandi"), flush=True)
             sys.exit(3)
 
     if a.cek:

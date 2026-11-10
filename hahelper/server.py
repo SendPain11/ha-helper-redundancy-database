@@ -2,6 +2,7 @@
 import json
 import os
 import socket
+import sys
 import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -176,5 +177,7 @@ def serve(cfg, datadir):
         ip = local_ip(cfg)
         if ip and not ip.startswith("127."):
             msg += f"\nDari komputer lain : http://{ip}:{cfg.port}"
-    print(msg + "\nBiarkan jendela ini terbuka. Tutup jendela = dashboard berhenti.\n", flush=True)
+    if sys.stdout is not None and sys.stdout.isatty():
+        msg += "\nBiarkan jendela ini terbuka. Tutup jendela = dashboard berhenti."
+    print(msg + "\n", flush=True)
     return httpd, url, app

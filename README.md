@@ -21,3 +21,8 @@ python jalankan.py --cek            # cek sekali di layar
 - Bisa dibuka dari komputer lain lewat `http://<IP>:8099`
 - Windows: berjalan terus di latar (`simpan-sandi.bat`, lalu `pasang-jalan-terus.bat`),
   sandi disimpan terenkripsi (DPAPI)
+
+## Versi 3
+- Linux (mis. di VM witness) sebagai layanan systemd: `sudo bash linux/pasang.sh`
+- Perintah singkat: `sudo ha-helper status | cek | log | config | sandi`
+- Dibatasi CPU 25%, RAM 256 MB, prioritas disk terendah agar etcd tidak terganggu
