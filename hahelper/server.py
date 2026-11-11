@@ -177,7 +177,7 @@ def serve(cfg, datadir):
         ip = local_ip(cfg)
         if ip and not ip.startswith("127."):
             msg += f"\nDari komputer lain : http://{ip}:{cfg.port}"
-    if sys.stdout is not None and sys.stdout.isatty():
+    if getattr(sys.stdout, "isatty", lambda: False)():
         msg += "\nBiarkan jendela ini terbuka. Tutup jendela = dashboard berhenti."
     print(msg + "\n", flush=True)
     return httpd, url, app

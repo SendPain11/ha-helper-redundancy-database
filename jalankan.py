@@ -40,6 +40,9 @@ class _Log:
     def flush(self):
         pass
 
+    def isatty(self):
+        return False
+
 
 def _console_utf8():
     for s in (sys.stdout, sys.stderr):  # konsol Windows (cp1252) tidak kenal huruf seperti → dan ≥
@@ -109,7 +112,9 @@ def main():
         print(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} HA Helper {__version__} mulai ===", flush=True)
     from hahelper.secret import Store
     if not os.path.exists(a.config):
-        sys.exit(f"Berkas konfigurasi tidak ada: {a.config}")
+        contoh = os.path.join(HERE, "config.contoh.ini")
+        hint = f"\nSalin {contoh} menjadi config.ini lalu sesuaikan." if os.path.exists(contoh) else ""
+        sys.exit(f"Berkas konfigurasi tidak ada: {a.config}{hint}")
     store = Store(os.path.join(DATA, "sandi.dat"))
 
     if a.simpan_sandi:
