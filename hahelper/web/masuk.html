@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Masuk · HA Helper</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%230e7c7b%22/%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2217%22%20rx%3D%2216%22%20ry%3D%226%22/%3E%3Cpath%20d%3D%22M16%2017v28c0%203.3%207.2%206%2016%206s16-2.7%2016-6V17%22/%3E%3Cpath%20d%3D%22M16%2031c0%203.3%207.2%206%2016%206s16-2.7%2016-6%22/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{--bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#667085;--line:#e3e6ec;--accent:#2f5fb3;--crit:#c0262d}
 @media (prefers-color-scheme:dark){:root{--bg:#12151b;--panel:#1b1f27;--ink:#e6e8ec;--muted:#98a1b3;--line:#2b313c;--accent:#7aa2f7;--crit:#ff6b6b}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--ink);font:14px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif;padding:16px}
-form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:26px 24px;width:100%;max-width:340px}
+form{background:var(--panel);border:1px solid var(--line);border-top:4px solid #0e7c7b;border-radius:12px;padding:26px 24px;width:100%;max-width:340px}
 h1{font-size:18px;margin:0 0 4px}p{margin:0 0 18px;color:var(--muted);font-size:13px}
 label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px}
 input{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
@@ -20,8 +21,7 @@ button:disabled{opacity:.6}
 </head>
 <body>
 <form id="f">
-  <h1>HA Helper</h1>
-  <p>Dashboard cluster redundansi database</p>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><svg style="width:44px;height:44px;flex:0 0 auto" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e7c7b"/><g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="32" cy="17" rx="16" ry="6"/><path d="M16 17v28c0 3.3 7.2 6 16 6s16-2.7 16-6V17"/><path d="M16 31c0 3.3 7.2 6 16 6s16-2.7 16-6"/></g></svg><div><h1 style="margin:0">HA Helper</h1><p style="margin:0">Dashboard redundansi database</p></div></div>
   <label for="u">Nama pengguna</label><input id="u" autocomplete="username" autofocus required>
   <label for="p">Sandi</label><input id="p" type="password" autocomplete="current-password" required>
   <button id="b">Masuk</button>

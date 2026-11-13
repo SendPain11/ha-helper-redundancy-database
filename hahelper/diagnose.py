@@ -79,10 +79,10 @@ def summarize(cfg, s):
         if x["replay_paused"]:
             out.append(F("warn", "Replikasi", f"Penerapan data di {x['name']} DIJEDA",
                          "Mungkin sisa pengecekan data yang menjeda penerapan lalu terhenti.",
-                         "sudo -u postgres psql -p <porta-postgres> -c \"SELECT pg_wal_replay_resume();\""))
+                         "sudo -u postgres psql -p 5433 -c \"SELECT pg_wal_replay_resume();\""))
     if cfg.preferred and leader and leader != cfg.preferred:
         out.append(F("info", "Patroni", f"Pemimpin saat ini {leader}, bukan pemimpin utama {cfg.preferred}",
-                     "Bila memakai skrip failback otomatis, peran akan dikembalikan setelah node itu sehat."))
+                     "Bila skrip pengembalian pemimpin dipasang, peran dikembalikan setelah node utama sehat kembali."))
 
     # ---------------- streaming vs produksi
     if prod.get("off"):
@@ -101,6 +101,70 @@ def summarize(cfg, s):
             if b is not None and b > cfg.lag_mb_warn:
                 out.append(F("warn", "Replikasi", f"{x['name']} tertinggal {b} MB dari produksi",
                              "Tekan 'Cek streaming & data' untuk mengukur waktu menyusul."))
+
+    # ---------------- pemimpin & replikasi (dibaca lewat jalur tulis HAProxy)
+    u = s.get("utama") or {}
+    mode = s.get("mode", "sebelum")
+    lead_role = leaders[0]["role"] if len(leaders) == 1 else None
+    if not u.get("ok"):
+        out.append(F("warn", "Pemimpin", "Tidak bisa membaca database lewat jalur tulis HAProxy",
+                     u.get("error", ""), f"Cek [cluster] alamat_haproxy/sandi di config.ini dan ufw porta {cfg.p_tulis}."))
+    else:
+        if mode == "sesudah":
+            if lead_role == "standby_leader":
+                out.append(F("crit", "Pemimpin", "Cluster MASIH STANDBY: aplikasi tidak bisa menulis",
+                             "Mode sesudah cutover ([produksi] aktif = no), tetapi pemimpin berperan Standby Leader.",
+                             "Hari-H Langkah 5: patronictl edit-config, hapus blok standby_cluster"))
+            elif u["recovery"] or u["read_only"]:
+                out.append(F("crit", "Pemimpin", f"Jalur tulis menuju server HANYA-BACA ({u['server']})",
+                             "Aplikasi tidak bisa menyimpan data.",
+                             "patronictl -c /etc/patroni/config.yml list ; cek HAProxy jalur tulis"))
+            else:
+                out.append(F("ok", "Pemimpin", f"Database utama {leader or u['server']} bisa menulis",
+                             f"Koneksi {u['conns']} dari maksimal {u['max_conn']}"))
+            # arsip WAL = dasar backup
+            ar = u["arsip"]
+            if u["archive_mode"] not in ("on", "always"):
+                out.append(F("warn", "Backup", "Arsip WAL TIDAK aktif",
+                             "Backup point-in-time tidak berjalan.",
+                             "patronictl edit-config: archive_mode 'on' (perlu restart bergilir)"))
+            elif ar["gagal_umur_detik"] is not None and (ar["umur_detik"] is None or ar["gagal_umur_detik"] < ar["umur_detik"]):
+                out.append(F("crit", "Backup", f"Arsip WAL GAGAL ({ar['gagal_wal']})",
+                             "Backup macet dan WAL menumpuk di disk pemimpin. Wajar hanya beberapa menit "
+                             "di Hari-H antara Langkah 5 dan 6B.",
+                             f"sudo -u postgres pgbackrest --stanza={cfg.stanza_cluster} check ; tail -20 /var/log/pgbackrest/*.log"))
+            elif ar["umur_detik"] is None:
+                out.append(F("warn", "Backup", "Belum ada satu pun WAL yang terarsip",
+                             "", f"sudo -u postgres pgbackrest --stanza={cfg.stanza_cluster} check"))
+            elif ar["umur_detik"] > 3600:
+                out.append(F("warn", "Backup", f"Arsip WAL terakhir {ar['umur_detik'] // 60} menit lalu",
+                             "Biasanya beberapa menit sekali pada database yang sibuk."))
+            else:
+                out.append(F("ok", "Backup", f"Arsip WAL berjalan, terakhir {ar['umur_detik'] // 60} menit lalu",
+                             f"{ar['wal_terakhir']} ; total {ar['jumlah']}"))
+        elif lead_role == "leader":
+            out.append(F("warn", "Pemimpin", "Cluster sudah menjadi UTAMA, tetapi config masih memantau produksi",
+                         "Dashboard masih membandingkan dengan produksi lama.",
+                         "sudo ha-helper config -> [produksi] aktif = no, lalu sudo ha-helper sandi"))
+        if u["max_conn"] and u["conns"] > 0.8 * u["max_conn"]:
+            out.append(F("warn", "Pemimpin", f"Koneksi {u['conns']} dari maksimal {u['max_conn']} (>80%)",
+                         "Aplikasi bisa ditolak bila penuh."))
+        # replikasi pemimpin -> replica, dilihat dari sisi pemimpin
+        streaming = {r["nama"]: r for r in u["replikasi"]}
+        for x in nodes:
+            if x["name"] == leader or not x["in_cluster"]:
+                continue
+            r = streaming.get(x["name"])
+            if not r:
+                out.append(F("warn", "Replikasi", f"{x['name']} TIDAK menerima replikasi dari pemimpin",
+                             "Tidak tercatat di pg_stat_replication pemimpin.",
+                             "journalctl -u patroni -n 30 --no-pager  (di node itu)"))
+            elif r["status"] != "streaming":
+                out.append(F("warn", "Replikasi", f"{x['name']} berstatus {r['status']} (belum streaming)"))
+    for x in nodes:
+        r = next((r for r in (u.get("replikasi") or []) if r["nama"] == x["name"]), None)
+        x["rep_status"] = r["status"] if r else None
+        x["rep_jeda"] = r["jeda_detik"] if r else None
 
     # ---------------- etcd
     em = et["members"]
@@ -152,8 +216,13 @@ def summarize(cfg, s):
             out.append(F("warn", "VIP", f"Alamat {v} tidak terjangkau dari PC",
                          "Aplikasi yang memakai alamat ini mungkin juga tidak bisa tersambung.", "systemctl status keepalived  (di ketiga node)"))
         elif holder:
-            out.append(F("ok", "VIP", f"Alamat {v} dipegang {holder}",
-                         "" if holder == leader else "Boleh berbeda dengan pemimpin; HAProxy tetap meneruskan ke pemimpin."))
+            if holder == leader or not leader:
+                out.append(F("ok", "VIP", f"Alamat {v} dipegang {holder}" + (" (node pemimpin)" if holder == leader else "")))
+            else:
+                out.append(F("info", "VIP", f"Alamat {v} dipegang {holder}, pemimpin {leader}",
+                             "keepalived memindahkan alamat ke node pemimpin dalam +/- 6 detik. Bila menetap: HAProxy di node "
+                             "pemimpin mati (wajar, HAProxy node ini tetap meneruskan ke pemimpin) atau chk_leader belum terpasang.",
+                             "journalctl -u keepalived -n 20 --no-pager"))
         else:
             out.append(F("warn", "VIP", f"Pemegang alamat {v} tidak cocok dengan node mana pun"))
 
@@ -165,6 +234,7 @@ def summarize(cfg, s):
                          "tulis": (r.get("proxies", {}).get("pgsql_tulis") or {}).get("servers", []),
                          "baca": (r.get("proxies", {}).get("pgsql_baca") or {}).get("servers", [])}) for n, r in hn.items()},
         "vip": hap["vip"], "produksi": {k: v for k, v in prod.items() if k != "lsn_int"},
+        "mode": s.get("mode", "sebelum"), "utama": s.get("utama"),
         "time": s["time"], "poll_ms": s["poll_ms"],
     }
     out.sort(key=lambda f: -RANK[f["level"]])

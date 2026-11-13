@@ -151,8 +151,45 @@ def produksi(cfg):
             r = c.query("SELECT (CASE WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn() "
                         "ELSE pg_current_wal_lsn() END)::text, pg_is_in_recovery()::text")
             ro = c.query("SHOW default_transaction_read_only")
+            a = c.query("SELECT archived_count::text, failed_count::text, coalesce(last_archived_wal,''), "
+                        "coalesce(extract(epoch FROM now()-last_archived_time)::bigint::text,''), "
+                        "coalesce(last_failed_wal,''), "
+                        "coalesce(extract(epoch FROM now()-last_failed_time)::bigint::text,''), "
+                        "current_setting('archive_mode') FROM pg_stat_archiver")[0]
+            num = lambda v: int(v) if v not in ("", None) else None  # noqa: E731
             return {"lsn": r[0][0], "lsn_int": lsn_to_int(r[0][0]), "recovery": r[0][1] == "true",
-                    "read_only": ro[0][0] == "on"}
+                    "read_only": ro[0][0] == "on",
+                    "arsip": {"jumlah": num(a[0]), "gagal": num(a[1]), "wal_terakhir": a[2], "umur_detik": num(a[3]),
+                              "gagal_wal": a[4], "gagal_umur_detik": num(a[5]), "mode": a[6]}}
+    return _try(_q)
+
+
+# ------------------------------------------------------------------ pemimpin (lewat jalur tulis HAProxy)
+_POS = "(CASE WHEN pg_is_in_recovery() THEN pg_last_wal_replay_lsn() ELSE pg_current_wal_lsn() END)"
+
+
+def utama(cfg):
+    """Keadaan database yang dilayani jalur tulis: bisa menulis?, arsip WAL, replikasi, koneksi."""
+    def _q():
+        with Conn(cfg.cl_host, cfg.p_tulis, cfg.cl_user, cfg.cl_pass, cfg.db, timeout=cfg.timeout + 2) as c:
+            r = c.query("SELECT pg_is_in_recovery()::text, coalesce(host(inet_server_addr()),'lokal'), "
+                        f"{_POS}::text, current_setting('archive_mode'), "
+                        "current_setting('default_transaction_read_only'), current_setting('max_connections'), "
+                        "(SELECT count(*) FROM pg_stat_activity WHERE backend_type='client backend')::text")[0]
+            a = c.query("SELECT archived_count::text, failed_count::text, coalesce(last_archived_wal,''), "
+                        "coalesce(extract(epoch FROM now()-last_archived_time)::bigint::text,''), "
+                        "coalesce(last_failed_wal,''), "
+                        "coalesce(extract(epoch FROM now()-last_failed_time)::bigint::text,'') FROM pg_stat_archiver")[0]
+            rep = c.query("SELECT coalesce(application_name,''), coalesce(host(client_addr),''), coalesce(state,''), "
+                          f"coalesce(pg_wal_lsn_diff({_POS}, replay_lsn)::bigint::text,''), "
+                          "coalesce(round(extract(epoch FROM replay_lag)::numeric,1)::text,'') FROM pg_stat_replication")
+        num = lambda v: int(v) if v not in ("", None) else None  # noqa: E731
+        return {"recovery": r[0] == "true", "server": r[1], "lsn": r[2], "archive_mode": r[3],
+                "read_only": r[4] == "on", "max_conn": int(r[5]), "conns": int(r[6]),
+                "arsip": {"jumlah": num(a[0]), "gagal": num(a[1]), "wal_terakhir": a[2], "umur_detik": num(a[3]),
+                          "gagal_wal": a[4], "gagal_umur_detik": num(a[5])},
+                "replikasi": [{"nama": x[0], "alamat": x[1], "status": x[2], "selisih_byte": num(x[3]),
+                               "jeda_detik": float(x[4]) if x[4] else None} for x in rep]}
     return _try(_q)
 
 
@@ -160,5 +197,7 @@ def snapshot(cfg):
     t0 = time.time()
     f_pat, f_etcd = POOL.submit(patroni, cfg), POOL.submit(etcd, cfg)
     f_hap, f_prod = POOL.submit(haproxy, cfg), POOL.submit(produksi, cfg)
+    f_ut = POOL.submit(utama, cfg)
     return {"time": time.time(), "patroni": f_pat.result(), "etcd": f_etcd.result(),
-            "haproxy": f_hap.result(), "produksi": f_prod.result(), "poll_ms": int((time.time() - t0) * 1000)}
+            "haproxy": f_hap.result(), "produksi": f_prod.result(), "utama": f_ut.result(),
+            "mode": "sebelum" if cfg.prod_on else "sesudah", "poll_ms": int((time.time() - t0) * 1000)}

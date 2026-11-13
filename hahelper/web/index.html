@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HA Helper · Cluster Database</title>
+<link rel="icon" id="fav" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%230e7c7b%22/%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cellipse%20cx%3D%2232%22%20cy%3D%2217%22%20rx%3D%2216%22%20ry%3D%226%22/%3E%3Cpath%20d%3D%22M16%2017v28c0%203.3%207.2%206%2016%206s16-2.7%2016-6V17%22/%3E%3Cpath%20d%3D%22M16%2031c0%203.3%207.2%206%2016%206s16-2.7%2016-6%22/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{
   --bg:#f4f5f7;--panel:#fff;--ink:#1d2330;--muted:#667085;--line:#e3e6ec;
@@ -64,10 +65,31 @@ body.viewer .adm{display:none!important}
 .onlyview{display:none}body.viewer .onlyview{display:block}
 #who{font-size:13px}
 </style>
+<style>
+header{border-top:4px solid #0e7c7b}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+.step>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.step>summary::-webkit-details-marker{display:none}
+.step .body{padding:0 14px 14px}
+.step.s-berjalan{border-color:var(--info);box-shadow:inset 3px 0 0 var(--info)}
+.step.s-selesai{box-shadow:inset 3px 0 0 var(--ok)}.step.s-gagal{border-color:var(--crit);box-shadow:inset 3px 0 0 var(--crit)}
+.step.s-lewati{opacity:.7}
+pre.cmd{background:var(--code);padding:10px 12px;border-radius:8px;font:12px/1.5 Consolas,ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;margin:6px 0;position:relative}
+pre.cmd button{position:absolute;top:6px;right:6px;font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.chk{display:flex;gap:8px;align-items:flex-start;padding:3px 0;font-size:13px}.chk input{margin-top:3px}
+.chip{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:999px;margin:2px 4px 2px 0}
+.seg{flex:1;height:8px;border-radius:3px;background:var(--line)}
+.seg.selesai{background:var(--ok)}.seg.berjalan{background:var(--info)}.seg.gagal{background:var(--crit)}.seg.lewati{background:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}.bar>div{height:100%;background:var(--accent)}
+textarea{width:100%;font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);min-height:44px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand svg{width:30px;height:30px;flex:0 0 auto}
+.brand .sub{font-size:11.5px;color:var(--muted);line-height:1.2}
+</style>
 </head>
 <body>
 <header>
-  <h1>HA Helper · Cluster Database</h1>
+  <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0e7c7b"/><g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="32" cy="17" rx="16" ry="6"/><path d="M16 17v28c0 3.3 7.2 6 16 6s16-2.7 16-6V17"/><path d="M16 31c0 3.3 7.2 6 16 6s16-2.7 16-6"/></g></svg><div><h1>HA Helper</h1><div class="sub">Dashboard redundansi database · bukan halaman HAProxy</div></div></div>
   <span id="lvl" class="pill l-info">MEMUAT</span>
   <span>Pemimpin: <b id="hdrLeader">-</b></span>
   <span class="sp"></span>
@@ -79,7 +101,11 @@ body.viewer .adm{display:none!important}
 <nav id="nav">
   <button data-t="ringkas" class="on">Ringkasan</button>
   <button data-t="stream">Streaming &amp; Data</button>
+  <button data-t="semua">Cek Semua Tabel <span id="cpBadge"></span></button>
+  <button data-t="backup">Backup <span id="bkBadge"></span></button>
   <button data-t="uji">Uji Failover</button>
+  <button data-t="harih">Hari-H <span id="hhBadge"></span></button>
+  <button data-t="konfig">Konfigurasi Node <span id="kfBadge"></span></button>
   <button data-t="riwayat">Riwayat &amp; Peringatan</button>
   <button data-t="atur">Pengaturan</button>
 </nav>
@@ -99,13 +125,13 @@ body.viewer .adm{display:none!important}
 
 <section class="tab" id="t-stream">
   <div class="grid g2" style="margin-bottom:14px">
-    <div class="card"><h2>Produksi</h2><div id="prod"></div></div>
-    <div class="card"><h2>Posisi tiap node terhadap produksi</h2><div id="behind"></div></div>
+    <div class="card"><h2 id="prodT">Produksi</h2><div id="prod"></div></div>
+    <div class="card"><h2 id="behindT">Posisi tiap node terhadap produksi</h2><div id="behind"></div></div>
   </div>
   <div class="card">
     <h2>Cek streaming &amp; data</h2>
-    <p class="muted small" style="margin-top:0">Menghitung data baru di produksi (rentang menit terakhir, berhenti 5 menit lalu), menunggu semua node
-      menyusul posisi produksi, lalu menghitung data yang sama lewat jalur tulis dan jalur baca cluster. Hanya membaca.</p>
+    <p class="muted small" style="margin-top:0" id="dcDesc">Mencocokkan JUMLAH dan ISI setiap baris data baru (rentang menit terakhir, berhenti 5 menit lalu)
+      antara acuan dan node cluster, setelah semua node menyusul. Yang beda dicek ulang 2 kali. Hanya membaca.</p>
     <p class="onlyview muted small">Hanya admin yang bisa menjalankan cek. Hasil cek terakhir tampil di bawah.</p>
     <div class="row adm"><button class="btn" id="dcBtn" onclick="startDC()">Jalankan cek</button><span id="dcStep" class="muted"></span></div>
     <div id="dcOut" style="margin-top:12px"></div>
@@ -118,7 +144,7 @@ body.viewer .adm{display:none!important}
       <h2>Perekam</h2>
       <p class="onlyview muted small" style="margin-top:0">Hanya admin yang bisa memulai/menghentikan rekaman. Anda bisa melihat jalannya rekaman di sini.</p>
       <div class="row adm" style="margin-bottom:10px">
-        <input type="text" id="note" placeholder="Keterangan uji, mis. qm stop &lt;VMID&gt; node 1">
+        <input type="text" id="note" placeholder="Keterangan uji, mis. qm stop db-node2">
         <button class="btn" id="recStart" onclick="recStart()">Mulai rekam</button>
         <button class="btn red" id="recStop" onclick="recStop()" disabled>Selesai</button>
       </div>
@@ -132,11 +158,11 @@ body.viewer .adm{display:none!important}
     <div class="card">
       <h2>Cara menguji</h2>
       <ol class="steps small">
-        <li>Bila ada skrip pengembalian pemimpin otomatis (failback), nonaktifkan dulu bila ingin menguji tanpanya.</li>
+        <li>Matikan dulu skrip pengembalian bila ingin menguji tanpa itu: <code>touch /etc/patroni/no-failback</code></li>
         <li>Tulis keterangan, tekan <b>Mulai rekam</b>.</li>
         <li>Di host Proxmox: <code>qm stop &lt;VMID&gt;</code>, atau di node: <code>systemctl stop patroni</code>.</li>
         <li>Tunggu pemimpin baru muncul. Nyalakan kembali node yang dimatikan.</li>
-        <li>Tunggu sampai keadaan stabil (bila menguji pengembalian, tunggu sampai pemimpin kembali), lalu tekan <b>Selesai</b>.</li>
+        <li>Tunggu sampai keadaan stabil (bila menguji pengembalian, ±11 menit), lalu tekan <b>Selesai</b>.</li>
         <li>Unduh laporan untuk dilampirkan ke PM.</li>
       </ol>
     </div>
@@ -144,6 +170,97 @@ body.viewer .adm{display:none!important}
   <div class="grid g2">
     <div class="card"><h2>Kejadian selama rekaman</h2><div class="ev" id="recEv"></div></div>
     <div class="card"><h2>Laporan</h2><div id="recRep"></div></div>
+  </div>
+</section>
+
+<section class="tab" id="t-konfig">
+  <div class="card" style="margin-bottom:14px">
+    <h2>Keseragaman konfigurasi antar node</h2>
+    <p class="muted small" style="margin-top:0">Tiap node mengirim ringkasan konfigurasinya tiap 5 menit (versi, nilai penting, sidik berkas; tanpa sandi).
+      Helper membandingkan kelimanya. <b>BEDA</b> = seharusnya sama tapi berbeda. <b>SALAH</b> = tidak sesuai aturan (mis. ufw tanpa komentar).
+      <b>WAJAR</b> = memang berbeda per node (hostname, prioritas keepalived). Hanya membaca; tidak ada yang diubah di node.</p>
+    <div id="kfNodes"></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Berkas &amp; layanan per node</h2>
+      <label class="small"><input type="checkbox" id="kfOnly" onchange="kfRender()"> tampilkan hanya yang BEDA / SALAH</label></div>
+    <div id="kfTab" style="overflow-x:auto;margin-top:8px"></div>
+  </div>
+  <div class="card" style="margin-bottom:14px"><h2>PostgreSQL: pengaturan penting (dibaca langsung)</h2><div id="kfPg" style="overflow-x:auto"></div></div>
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><h2>Anggota etcd menurut tiap anggota</h2><div id="kfEtcd"></div></div>
+    <div class="card"><h2>Patroni &amp; HAProxy (dibaca langsung)</h2><div id="kfPat"></div></div>
+  </div>
+  <div class="card">
+    <h2>Memasang pelapor di node</h2>
+    <ol class="steps small">
+      <li>Di server helper ini: <code>sudo ha-helper token</code> → salin token.</li>
+      <li>Salin <code>pasang-lapor.sh</code> dan <code>hahelper-lapor.py</code> ke tiap node (5 node).</li>
+      <li>Di tiap node: <code>sudo bash pasang-lapor.sh http://&lt;IP-helper&gt;:8099 &lt;token&gt;</code></li>
+      <li>Baris node di atas berubah jadi "baru saja" dalam beberapa detik.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="tab" id="t-semua">
+  <div class="card" style="margin-bottom:14px">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Cek semua tabel: produksi vs node cluster</h2>
+      <select id="cpRun" onchange="cpLoad()" style="font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)"></select></div>
+    <div id="cpHead" style="margin-top:10px"></div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><button class="btn sec" id="cpF1" onclick="cpFilter(1)">Belum COCOK</button><button class="btn sec" id="cpF0" onclick="cpFilter(0)">Semua</button>
+        <input type="text" id="cpCari" placeholder="cari tabel..." oninput="cpRender()" style="min-width:200px"></div>
+      <a id="cpCsv" class="small" href="#">Unduh CSV</a></div>
+    <div id="cpTab" style="overflow-x:auto;margin-top:10px"></div>
+  </div>
+  <div class="card"><h2>Cara menjalankan</h2>
+    <ol class="steps small">
+      <li>Di db-node1 atau db-node2 (yang sudah terpasang pelapor, supaya hasil terkirim ke sini): salin <code>cek-semua-tabel.sh</code> ke <code>/tmp</code>.</li>
+      <li>Malam hari, setelah backup 23:00: <code>MULAI=01:00 LATAR=1 sudo bash /tmp/cek-semua-tabel.sh</code></li>
+      <li>Kemajuan muncul di halaman ini. Ulang yang belum COCOK: <code>TABEL_FILE=/var/log/cek-semua/&lt;waktu&gt;/ulang.txt sudo bash /tmp/cek-semua-tabel.sh</code></li>
+    </ol>
+    <p class="small muted">COCOK = jumlah & isi sama · BERUBAH = sempat beda karena sedang diubah, saat dicek ulang sama · AKTIF = terus diubah selama dicek (ulangi saat sepi / Hari-H) ·
+      BEDA = beda padahal tidak diubah (MASALAH) · UNLOGGED = tidak direplikasi · GAGAL = tidak terbaca</p>
+  </div>
+</section>
+
+<section class="tab" id="t-backup">
+  <div class="grid g2" style="margin-bottom:14px">
+    <div class="card"><h2 id="bkT">Backup</h2><div id="bkStanza"></div></div>
+    <div class="grid" style="gap:14px">
+      <div class="card"><h2>Arsip WAL (dibaca langsung dari database)</h2><div id="bkArsip"></div></div>
+      <div class="card"><h2>NAS &amp; jadwal per node</h2><div id="bkNode"></div></div>
+    </div>
+  </div>
+  <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Daftar backup</h2><span id="bkPilih" class="row"></span></div>
+    <div id="bkList" style="overflow-x:auto;margin-top:8px"></div>
+    <p class="small muted">Dibaca dari <code>pgbackrest info</code> oleh pelapor di node database (tiap 15 menit, hanya membaca). Sebelum cutover yang dinilai stanza backup server lama; sesudah cutover stanza cluster.</p>
+  </div>
+</section>
+
+<section class="tab" id="t-harih">
+  <div class="card" style="margin-bottom:14px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start">
+      <div><h2 style="margin:0 0 6px">Pelaksanaan Hari-H</h2><div id="hhHead"></div></div>
+      <div class="row adm">
+        <input type="text" id="hhNama" placeholder="nama pelaksana" style="min-width:180px" onchange="try{localStorage.setItem('hhNama',this.value)}catch(e){}">
+        <button class="btn" id="hhMulai" onclick="hhAksi({aksi:'mulai_harih'})">Mulai pelaksanaan</button>
+        <button class="btn sec" onclick="hhAksi({aksi:'selesai_harih'})">Selesai</button>
+      </div>
+    </div>
+    <div id="hhBar" style="display:flex;gap:3px;margin-top:12px"></div>
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <span class="small muted">Helper hanya MENCATAT. Semua perintah tetap dijalankan di node masing-masing. Peran "lihat" (mis. PM) bisa memantau halaman ini langsung.</span>
+      <span class="row"><a href="/api/harih/laporan" class="small">Unduh laporan untuk PM</a>
+        <button class="btn sec adm" onclick="if(confirm('Kosongkan semua centang Hari-H? Salinan lama tetap disimpan di folder data.'))hhAksi({aksi:'reset'})">Kosongkan</button></span>
+    </div>
+  </div>
+  <div id="hhSteps"></div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><h2>Jalan mundur (batas keputusan 30 menit sejak Langkah 2)</h2><div id="hhMundur"></div></div>
+    <div class="card"><h2>Sesudah pelaksanaan</h2><div id="hhSesudah"></div></div>
   </div>
 </section>
 
@@ -185,15 +302,22 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
 });
 try{const t=localStorage.getItem("tab");if(t)document.querySelector(`nav button[data-t="${t}"]`)?.click()}catch(e){}
 
+const ICON_C={ok:"#16a34a",info:"#0e7c7b",warn:"#d97706",crit:"#dc2626"};
+function setIcon(l){try{const c=ICON_C[l]||"#0e7c7b";
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="FILL"/><g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="32" cy="17" rx="16" ry="6"/><path d="M16 17v28c0 3.3 7.2 6 16 6s16-2.7 16-6V17"/><path d="M16 31c0 3.3 7.2 6 16 6s16-2.7 16-6"/></g></svg>`.replace("FILL",c);
+  $("fav").href="data:image/svg+xml,"+encodeURIComponent(svg);
+  document.title=(l==="crit"?"[KRITIS] ":l==="warn"?"[PERHATIAN] ":"")+"HA Helper · Cluster Database"}catch(e){}}
 async function j(u,o){const r=await fetch(u,o);if(r.status===401){location.href="/masuk";throw new Error("belum masuk")}return r.json()}
 let ROLE_ME="lihat";
 async function me(){const r=await j("/api/saya");ROLE_ME=r.peran;document.body.classList.toggle("viewer",r.peran!=="admin");
   $("who").textContent=r.pengguna+(r.peran==="admin"?" (admin)":" (lihat saja)")}
 async function logout(){await fetch("/api/keluar",{method:"POST"});location.href="/masuk"}
 
+let STATE_S=null,STATE_F=[];
 function renderStatus(d){
   const s=d.state;if(!s){$("upd").textContent="menunggu putaran pertama...";return}
-  $("lvl").className="pill l-"+s.level;$("lvl").textContent=LV[s.level];
+  STATE_S=s;STATE_F=d.findings||[];
+  $("lvl").className="pill l-"+s.level;$("lvl").textContent=LV[s.level];setIcon(s.level);
   $("hdrLeader").textContent=s.leader||"TIDAK ADA";
   $("upd").textContent=`diperbarui ${fmtT(s.time)} · ${s.poll_ms} ms`;
   // jalur
@@ -229,7 +353,27 @@ function renderStatus(d){
      const up=a=>a.filter(x=>(x.status||"").startsWith("UP")).map(x=>esc(x.name)).join(", ")||'<span class="err">TANPA SERVER</span>';
      return `<tr><td>${esc(n)}</td><td>${up(h.tulis)}</td><td>${up(h.baca)}</td></tr>`}).join("")}</tbody></table>`;
   // streaming tab
-  const p=s.produksi||{};
+  const p=s.produksi||{}, u=s.utama||{}, sesudah=s.mode==="sesudah";
+  $("prodT").textContent=sesudah?"Database utama (pemimpin)":"Produksi";
+  $("behindT").textContent=sesudah?"Replikasi pemimpin → replica":"Posisi tiap node terhadap produksi";
+  $("dcDesc").firstChild.textContent=sesudah?
+    "Mencocokkan JUMLAH dan ISI setiap baris data baru antara PEMIMPIN (jalur tulis) dan REPLICA (jalur baca), setelah replica menyusul. Yang beda dicek ulang 2 kali. Hanya membaca.":
+    "Mencocokkan JUMLAH dan ISI setiap baris data baru antara PRODUKSI dan node cluster (jalur tulis & baca), setelah semua node menyusul. Yang beda dicek ulang 2 kali. Hanya membaca.";
+  const umur=x=>x==null?"-":x<120?x+" detik":Math.round(x/60)+" menit";
+  if(sesudah){
+    const ar=u.arsip||{}, gagal=ar.gagal_umur_detik!=null&&(ar.umur_detik==null||ar.gagal_umur_detik<ar.umur_detik);
+    $("prod").innerHTML=!u.ok?`<div class="err">Tidak terbaca: ${esc(u.error)}</div>`:
+    `<div class="kv"><span>Server</span><span>${esc(u.server)} ${u.recovery||u.read_only?'<span class="badge l-crit">HANYA-BACA</span>':'<span class="badge l-ok">bisa menulis</span>'}</span>
+     <span>Posisi WAL</span><span><code>${esc(u.lsn)}</code></span>
+     <span>Koneksi</span><span>${u.conns} / ${u.max_conn}</span>
+     <span>Arsip WAL</span><span>${u.archive_mode!=="on"?'<span class="badge l-warn">TIDAK AKTIF</span>':gagal?`<span class="badge l-crit">GAGAL</span> ${esc(ar.gagal_wal)}`:`<span class="badge l-ok">jalan</span> terakhir ${umur(ar.umur_detik)} lalu`}</span>
+     <span>WAL terarsip</span><span>${ar.jumlah??"-"} (gagal ${ar.gagal??"-"})</span></div>`;
+    $("behind").innerHTML=`<table><thead><tr><th>Replica</th><th>Status</th><th class="n">Selisih</th><th class="n">Jeda</th></tr></thead><tbody>${
+      s.nodes.filter(n=>n.name!==s.leader).map(n=>{const r=(u.replikasi||[]).find(x=>x.nama===n.name);
+      return `<tr><td>${esc(n.name)}</td><td>${r?esc(r.status):'<span class="err">TIDAK menerima replikasi</span>'}</td>
+      <td class="n">${r&&r.selisih_byte!=null?(r.selisih_byte/1048576).toFixed(2)+" MB":"-"}</td><td class="n">${r&&r.jeda_detik!=null?r.jeda_detik+" dtk":"-"}</td></tr>`}).join("")}</tbody></table>
+      <p class="muted small">Dibaca dari pg_stat_replication di pemimpin. Untuk bukti isi data sama, pakai cek di bawah.</p>`;
+  } else {
   $("prod").innerHTML=p.off?'<span class="muted">Tidak diaktifkan di config.ini</span>':p.ok?
     `<div class="kv"><span>Alamat</span><span>${esc(d.config.produksi)}</span><span>Posisi WAL</span><span><code>${esc(p.lsn)}</code></span>
      <span>Mode</span><span>${p.recovery?"standby":"utama"}${p.read_only?' · <span class="badge l-warn">hanya-baca</span>':""}</span></div>`:
@@ -238,6 +382,7 @@ function renderStatus(d){
     s.nodes.map(n=>`<tr><td>${esc(n.name)}</td><td>${esc(ROLE[n.role]||n.role||"-")}</td><td class="n">${n.behind_prod_mb==null?"-":n.behind_prod_mb+" MB"}</td>
     <td>${n.replayed_ts?esc(String(n.replayed_ts).slice(0,19)):"-"}</td></tr>`).join("")}</tbody></table>
     <p class="muted small">Selisih kecil (beberapa MB) wajar saat produksi sibuk. Untuk ukuran pasti, pakai cek di bawah.</p>`;
+  }
   // pengaturan
   const c=d.config;
   $("cfg").innerHTML=`<div class="kv"><span>Node database</span><span>${c.node_database.map(x=>esc(x[0]+" "+x[1])).join("<br>")}</span>
@@ -285,11 +430,14 @@ async function pollDC(){
   if(r.status==="gagal"){$("dcOut").innerHTML=`<div class="err">Gagal: ${esc(r.error)}</div>`;return}
   const ok=r.beda===0&&r.semua_menyusul;
   $("dcOut").innerHTML=`<p>${pill(ok?"ok":"warn")} <b>${esc(r.kesimpulan)}</b></p>
-   <p class="small muted">Rentang data: ${esc(r.rentang[0])} s/d ${esc(r.rentang[1])} · posisi produksi <code>${esc(r.lsn_produksi)}</code></p>
-   <table style="margin-bottom:12px"><thead><tr><th>Node</th><th>Menyusul posisi produksi dalam</th></tr></thead><tbody>${
+   <p class="small muted">Acuan: <b>${esc(r.acuan_label||"Produksi")}</b> · rentang data ${esc(r.rentang[0])} s/d ${esc(r.rentang[1])} · posisi acuan <code>${esc(r.lsn_acuan||r.lsn_produksi)}</code></p>
+   <table style="margin-bottom:12px"><thead><tr><th>Node</th><th>Menyusul posisi acuan dalam</th></tr></thead><tbody>${
    Object.entries(r.menyusul).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${v==null?'<span class="err">TIDAK menyusul dalam 120 detik</span>':v+" detik"}</td></tr>`).join("")}</tbody></table>
-   <table><thead><tr><th>Tabel</th><th class="n">Produksi</th>${r.kolom.map(k=>`<th class="n">${esc(k.label)}<div class="muted">${esc(k.server||"gagal")}</div></th>`).join("")}<th>Hasil</th></tr></thead><tbody>${
-   r.baris.map(b=>`<tr><td>${esc(b.tabel)}</td><td class="n">${esc(b.produksi)}</td>${b.cluster.map(v=>`<td class="n">${esc(v??"-")}</td>`).join("")}<td>${pill(b.cocok?"ok":"warn").replace("AMAN","COCOK").replace("PERHATIAN","BEDA")}</td></tr>`).join("")}</tbody></table>
+   <table><thead><tr><th>Tabel</th><th class="n">${esc(r.acuan_label||"Produksi")}</th>${r.kolom.map(k=>`<th class="n">${esc(k.label)}<div class="muted">${esc(k.server||"gagal")}</div></th>`).join("")}<th>Hasil</th></tr></thead><tbody>${
+   r.baris.map(b=>{const h=b.hasil||(b.cocok?"COCOK":"BEDA");
+     return `<tr><td>${esc(b.tabel)}</td><td class="n">${esc(b.acuan??b.produksi??"-")}</td>${b.cluster.map(v=>`<td class="n">${esc(v??"-")}</td>`).join("")}
+     <td><span class="pill l-${h==="BEDA"?"warn":"ok"}">${h}</span>${b.beda?` <span class="small muted">${b.beda==="isi"?"jumlah sama, ISI beda":"JUMLAH beda"}</span>`:""}</td></tr>`}).join("")}</tbody></table>
+   <p class="muted small">COCOK = jumlah dan isi sama · BERUBAH = sempat beda karena data sedang diubah aplikasi, cocok saat dicek ulang · BEDA = tetap beda setelah dicek ulang</p>
    ${r.kolom.filter(k=>k.error).map(k=>`<div class="err">${esc(k.label)}: ${esc(k.error)}</div>`).join("")}`;
 }
 
@@ -314,7 +462,189 @@ async function rec(){
   }catch(e){setTimeout(rec,4000)}
 }
 
-me().then(()=>{tick();hist();pollDC();rec()});
+let KF=null;
+const pendek=n=>String(n).replace(/^[a-z0-9]+-(?=[a-z]+[0-9])/i,"");  // awalan nama cluster dibuang supaya kolom ringkas
+const umurTxt=u=>u==null?'<span class="err">belum melapor</span>':u<90?"baru saja":u<3600?Math.round(u/60)+" menit lalu":'<span class="err">'+Math.round(u/3600)+" jam lalu</span>";
+const ST={SAMA:"ok",WAJAR:"info",INFO:"info",BEDA:"warn",SALAH:"warn"};
+async function kf(){try{KF=await j("/api/konfig");kfRender()}catch(e){}setTimeout(kf,15000)}
+function kfRender(){const d=KF;if(!d||!d.node)return;
+  const bad=(d.baris||[]).filter(b=>b.status==="BEDA"||b.status==="SALAH").length;
+  $("kfBadge").innerHTML=bad?`<span class="pill l-warn" style="padding:0 7px">${bad}</span>`:"";
+  $("kfNodes").innerHTML=`<table><thead><tr><th>Node</th><th>Jenis</th><th>IP</th><th>Hostname</th><th>Laporan terakhir</th></tr></thead><tbody>${
+    d.node.map(n=>`<tr><td>${esc(n.node)}</td><td>${esc(n.jenis)}</td><td>${esc(n.ip)}</td><td>${esc(n.host||"-")}</td><td>${n.umur!=null&&n.umur>d.basi_menit*60?'<span class="err">BASI · </span>':""}${umurTxt(n.umur)}</td></tr>`).join("")}</tbody></table>`;
+  const cols=d.node.filter(n=>n.umur!=null).map(n=>n.node);
+  const rows=(d.baris||[]).filter(b=>!$("kfOnly").checked||b.status==="BEDA"||b.status==="SALAH");
+  let grp="";
+  $("kfTab").innerHTML=cols.length?`<table><thead><tr><th>Item</th>${cols.map(c=>`<th>${esc(pendek(c))}</th>`).join("")}<th>Hasil</th></tr></thead><tbody>${
+    rows.map(b=>{const g=b.kunci.split(".")[0];const head=g!==grp?(grp=g,`<tr><td colspan="${cols.length+2}" class="muted small" style="text-transform:uppercase;letter-spacing:.5px;padding-top:12px">${esc(g)}</td></tr>`):"";
+      return head+`<tr><td>${esc(b.label)}</td>${cols.map(c=>{const v=b.nilai[c];const s=b.salah.includes(c);
+        return `<td class="small" style="${s?"background:var(--warn-bg);color:var(--warn);font-weight:600":""}">${v==null?'<span class="muted">-</span>':esc(String(v)).replace(/, /g,",<br>")}</td>`}).join("")}
+      <td><span class="pill l-${ST[b.status]}">${b.status}</span>${b.catatan?`<div class="small muted">${esc(b.catatan)}</div>`:""}</td></tr>`}).join("")||`<tr><td class="muted">Tidak ada yang beda.</td></tr>`}</tbody></table>`
+    :'<span class="muted">Belum ada laporan dari node. Lihat cara memasang pelapor di bawah.</span>';
+  const jt=d.jauh||{};const pg=jt.pg||{kolom:[],baris:[]};
+  $("kfPg").innerHTML=pg.baris.length?`<table><thead><tr><th>Pengaturan</th>${pg.kolom.map(k=>`<th>${esc(k.label)}<div class="muted">${esc(k.server||"gagal")}</div></th>`).join("")}<th>Hasil</th></tr></thead><tbody>${
+    pg.baris.map(b=>`<tr><td>${esc(b.nama)}</td>${pg.kolom.map(k=>`<td class="small">${esc(b.nilai[k.label]??"-")}</td>`).join("")}<td><span class="pill l-${ST[b.status]}">${b.status}</span>${b.catatan?`<div class="small muted">${esc(b.catatan)}</div>`:""}</td></tr>`).join("")}</tbody></table>`
+    :`<span class="muted">${pg.kolom.some(k=>k.error)?"Gagal membaca: "+esc(pg.kolom.filter(k=>k.error).map(k=>k.label+" ("+k.error+")").join("; ")):"Menunggu cek pertama..."}</span>`;
+  const et=jt.etcd||{};
+  $("kfEtcd").innerHTML=Object.keys(et).length?`<table><thead><tr><th>Ditanya ke</th><th>Anggota yang dilihat</th></tr></thead><tbody>${
+    Object.entries(et).map(([n,v])=>`<tr><td>${esc(n)}</td><td class="small">${Array.isArray(v)?v.map(x=>esc(x.split("=")[0])).join(", "):'<span class="err">'+esc(v.error)+"</span>"}</td></tr>`).join("")}</tbody></table>`:'<span class="muted">Menunggu...</span>';
+  const pt=jt.patroni||{},hp=jt.haproxy||{};
+  $("kfPat").innerHTML=`<table><thead><tr><th>Node</th><th>Patroni</th><th>PostgreSQL</th><th>Tags</th><th>HAProxy tulis / baca</th></tr></thead><tbody>${
+    Object.entries(pt).map(([n,v])=>`<tr><td>${esc(n)}</td><td>${esc(v.versi||v.error||"-")}</td><td>${esc(v.pg||"-")}</td><td class="small">${esc(v.tags||"-")}</td>
+    <td class="small">${hp[n]?esc(hp[n].tulis.join(", "))+" / "+esc(hp[n].baca.join(", ")):"-"}</td></tr>`).join("")}</tbody></table>`;
+}
+
+// ===================================================================== Cek semua tabel
+const CPL={COCOK:"ok",BERUBAH:"ok",AKTIF:"info",BEDA:"warn",UNLOGGED:"crit",GAGAL:"warn"};
+let CPRUNS=[],CPD=null,CPF=1;
+const durTxt=s=>s==null?"-":s<90?s+" dtk":s<5400?Math.round(s/60)+" mnt":(s/3600).toFixed(1)+" jam";
+async function cp(){try{const L=await j("/api/cekpenuh");const sel=$("cpRun"),cur=sel.value;
+  CPRUNS=L;sel.innerHTML=L.map(r=>`<option value="${esc(r.run)}">${fmtDT(r.mulai)} · ${esc(r.status)}</option>`).join("")||"<option value=''>belum ada</option>";
+  if(cur&&L.some(r=>r.run===cur))sel.value=cur;
+  const m=L[0];$("cpBadge").innerHTML=m&&((m.jumlah.BEDA||0)+(m.jumlah.UNLOGGED||0))?`<span class="pill l-warn" style="padding:0 7px">${(m.jumlah.BEDA||0)+(m.jumlah.UNLOGGED||0)}</span>`:m&&m.status==="berjalan"?'<span class="pill l-info" style="padding:0 7px">…</span>':"";
+  await cpLoad()}catch(e){}setTimeout(cp,10000)}
+async function cpLoad(){const run=$("cpRun").value;if(!run){$("cpHead").innerHTML='<span class="muted">Belum ada hasil. Jalankan cek-semua-tabel.sh di node DB yang sudah terpasang pelapor.</span>';$("cpTab").innerHTML="";return}
+  CPD=await j("/api/cekpenuh?run="+encodeURIComponent(run));$("cpCsv").href="/api/cekpenuh/csv?run="+encodeURIComponent(run);cpRender()}
+function cpFilter(v){CPF=v;cpRender()}
+function cpRender(){const d=CPD;if(!d)return;
+  $("cpF1").style.fontWeight=CPF?"700":"400";$("cpF0").style.fontWeight=CPF?"400":"700";
+  const st={selesai:"ok",berjalan:"info",berhenti:"warn"}[d.status];
+  const pills=["COCOK","BERUBAH","AKTIF","BEDA","UNLOGGED","GAGAL"].filter(k=>d.jumlah[k]).map(k=>`<span class="pill l-${CPL[k]}">${k} ${d.jumlah[k]}</span>`).join(" ");
+  $("cpHead").innerHTML=`<div class="row" style="gap:18px"><span class="pill l-${st}">${d.status.toUpperCase()}</span>
+    <span>Mulai <b>${fmtDT(d.mulai)}</b></span>${d.selesai?`<span>Selesai <b>${fmtDT(d.selesai)}</b> (${durTxt(Math.round(d.selesai-d.mulai))})</span>`:`<span>Kabar terakhir ${fmtT(d.kabar)}</span>`}
+    <span><b>${d.dicek}</b> / ${d.total} tabel</span>${d.sisa_detik!=null?`<span>perkiraan sisa <b>${durTxt(d.sisa_detik)}</b></span>`:""}</div>
+    <div class="bar" style="margin:10px 0"><div style="width:${d.persen??(d.total?100*d.dicek/d.total:0)}%"></div></div>
+    <div>${pills}</div>
+    <div class="kv"><span>Dari</span><span>${esc(d.info.host||"")} → produksi ${esc(d.info.produksi||"")}, node ${esc(d.node.join(", "))}</span>
+    <span>Kelengkapan tabel</span><span>${esc(d.kelengkapan||"-")}</span>${d.info.filter?`<span>Batasan</span><span>${esc(d.info.filter)}</span>`:""}
+    <span>Berkas hasil</span><span><code>${esc(d.info.hasil||"-")}</code></span></div>`;
+  const q=$("cpCari").value.toLowerCase();
+  let rows=d.tabel.map((t,i)=>({...t,no:i+1})).filter(t=>(!CPF||!["COCOK","BERUBAH"].includes(t.hasil))&&(!q||t.tabel.toLowerCase().includes(q)));
+  const n=rows.length;rows=rows.slice(-500).reverse();
+  $("cpTab").innerHTML=n?`<table><thead><tr><th class="n">No</th><th>Tabel</th><th class="n">Ukuran</th><th class="n">Produksi</th>${d.node.map(x=>`<th class="n">${esc(pendek(x))}</th>`).join("")}<th>Hasil</th><th class="n">Lama</th></tr></thead><tbody>${
+    rows.map(t=>`<tr><td class="n">${t.no}</td><td>${esc(t.tabel)}</td><td class="n">${esc(t.ukuran)}</td><td class="n">${esc(t.produksi)}</td>${d.node.map((x,k)=>`<td class="n" style="${t.node[k]!==t.produksi&&t.hasil!=="COCOK"&&t.hasil!=="BERUBAH"?"color:var(--warn);font-weight:600":""}">${esc(t.node[k]??"-")}</td>`).join("")}
+    <td><span class="pill l-${CPL[t.hasil]||"info"}">${esc(t.hasil)}</span>${t.catatan?`<div class="small muted">${esc(t.catatan)}</div>`:""}</td><td class="n small">${durTxt(t.detik)}</td></tr>`).join("")}</tbody></table>${n>500?`<p class="small muted">Menampilkan 500 dari ${n}; unduh CSV untuk semuanya.</p>`:""}`
+    :`<span class="muted">${CPF?"Semua tabel yang sudah dicek COCOK.":"Tidak ada."}</span>`;
+}
+
+// ===================================================================== Backup
+let BK=null,BKS=null;
+const gb=b=>b==null?"-":b>=1e12?(b/1e12).toFixed(2)+" TB":b>=1e9?(b/1e9).toFixed(1)+" GB":(b/1e6).toFixed(0)+" MB";
+const umurJ=s=>s==null?"-":s<7200?Math.round(s/60)+" menit lalu":s<259200?Math.round(s/3600)+" jam lalu":Math.round(s/86400)+" hari lalu";
+async function bk(){try{BK=await j("/api/backup");bkRender()}catch(e){}setTimeout(bk,30000)}
+function bkRender(){const d=BK;if(!d||!d.mode)return;const now=Date.now()/1000;
+  $("bkT").textContent=d.mode==="sesudah"?`Backup cluster (stanza ${d.stanza_cluster})`:`Backup produksi (stanza ${d.stanza_lama}) · cluster mulai Hari-H`;
+  const ST=d.stanza||[];BKS=BKS&&ST.some(s=>s.nama===BKS)?BKS:(ST.some(s=>s.nama===d.aktif)?d.aktif:(ST[0]||{}).nama);
+  $("bkStanza").innerHTML=!ST.length?`<span class="muted">${d.node&&d.node.some(n=>n.umur!=null)?"Belum ada stanza terbaca di NAS.":"Pelapor belum terpasang di db-node1/db-node2."}</span>`:
+    ST.map(s=>{const t=s.terakhir,f=s.full_terakhir,a=(s.arsip||[]).slice(-1)[0]||{};const ok=s.kode===0;const akt=s.nama===d.aktif;
+      const lv=!ok?"warn":(s.umur_terakhir>26*3600?"warn":"ok");
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:10px;${akt?"":"opacity:.8"}">
+       <div class="row" style="justify-content:space-between"><b>${esc(s.nama)}${akt?' <span class="badge l-info">dinilai</span>':""}</b><span class="pill l-${lv}">${esc(s.pesan||"")}</span></div>
+       <div class="kv"><span>Backup terakhir</span><span>${t?`<b>${esc(t.jenis)}</b> ${fmtDT(t.selesai)} · ${umurJ(now-t.selesai)} · ${gb(t.ukuran_repo)}`:"-"}</span>
+       <span>Full terakhir</span><span>${f?`${fmtDT(f.selesai)} · ${umurJ(now-f.selesai)} · ${gb(f.ukuran_repo)}`:"-"}</span>
+       <span>Tersimpan</span><span>${s.jumlah.full} full, ${s.jumlah.diff} diff, ${s.jumlah.incr} incr · ${gb(s.ukuran_repo)} di NAS</span>
+       <span>Tertua</span><span>${s.tertua?fmtDT(s.tertua.selesai):"-"}</span>
+       <span>Rentang WAL</span><span class="small">${esc(a.min||"-")} → ${esc(a.max||"-")}</span></div></div>`}).join("");
+  const ar=(x,lbl)=>{if(!x)return `<tr><td>${lbl}</td><td colspan="3" class="muted">tidak terbaca</td></tr>`;const g=x.gagal_umur_detik!=null&&(x.umur_detik==null||x.gagal_umur_detik<x.umur_detik);
+    return `<tr><td>${lbl}</td><td>${g?'<span class="pill l-crit">GAGAL</span>':x.jumlah?'<span class="pill l-ok">jalan</span>':'<span class="pill l-info">belum</span>'}</td>
+     <td class="small">${esc(x.wal_terakhir||"-")}<div class="muted">${x.umur_detik!=null?umurJ(x.umur_detik):""}</div></td><td class="small">${x.gagal_wal?esc(x.gagal_wal)+'<div class="muted">'+umurJ(x.gagal_umur_detik)+"</div>":"-"}</td></tr>`};
+  $("bkArsip").innerHTML=`<table><thead><tr><th>Server</th><th>Status</th><th>WAL terakhir</th><th>Gagal terakhir</th></tr></thead><tbody>
+    ${d.mode==="sebelum"?ar((d.arsip||{}).produksi,"Produksi"):""}${ar((d.arsip||{}).cluster,"Cluster (pemimpin)")}</tbody></table>
+    ${d.mode==="sebelum"?'<p class="small muted">Cluster belum mengarsip sebelum Hari-H (standby). Mulai jalan di Langkah 6B.</p>':""}`;
+  $("bkNode").innerHTML=`<table><thead><tr><th>Node</th><th>NAS</th><th>Jadwal</th><th>Log cron terakhir</th></tr></thead><tbody>${(d.node||[]).map(n=>{const s=n.nas||{};
+    return `<tr><td>${esc(n.node)}<div class="small muted">${n.umur==null?"pelapor belum ada":umurJ(n.umur)}</div></td>
+    <td style="min-width:120px">${s.total?`<div class="bar"><div style="width:${s.pakai_persen}%;background:${s.pakai_persen>85?"var(--warn)":"var(--ok)"}"></div></div><div class="small">${s.pakai_persen}% · sisa ${gb(s.sisa)}</div>`:`<span class="small err">${esc(s.galat||"-")}</span>`}</td>
+    <td class="small">${esc(n.jadwal||"-").replace(/ \| /g,"<br>")}</td>
+    <td class="small">${n.cron_log?`${esc(n.cron_log.terakhir||"-")}<div class="muted">${umurJ(now-n.cron_log.ubah)}</div>`:'<span class="muted">-</span>'}</td></tr>`}).join("")}</tbody></table>`;
+  $("bkPilih").innerHTML=ST.map(s=>`<button class="btn sec" style="padding:4px 10px;${s.nama===BKS?"font-weight:700":""}" onclick="BKS='${esc(s.nama)}';bkRender()">${esc(s.nama)}</button>`).join("");
+  const S=ST.find(s=>s.nama===BKS);
+  $("bkList").innerHTML=S&&S.backup.length?`<table><thead><tr><th>Label</th><th>Jenis</th><th>Mulai</th><th class="n">Lama</th><th class="n">Ukuran DB</th><th class="n">Di NAS</th><th>WAL</th></tr></thead><tbody>${
+    S.backup.map(b=>`<tr><td class="small">${esc(b.label)}${b.galat?' <span class="badge l-warn">galat</span>':""}</td><td>${esc(b.jenis)}</td><td>${fmtDT(b.mulai)}</td><td class="n">${durTxt(b.selesai-b.mulai)}</td>
+    <td class="n">${gb(b.ukuran)}</td><td class="n">${gb(b.ukuran_repo)}</td><td class="small muted">${esc((b.wal_awal||"").slice(-8))}…${esc((b.wal_akhir||"").slice(-8))}</td></tr>`).join("")}</tbody></table>`:'<span class="muted">-</span>';
+  const bad=(STATE_F||[]).filter(f=>f.area==="Backup"&&(f.level==="warn"||f.level==="crit")).length;
+  $("bkBadge").innerHTML=bad?`<span class="pill l-warn" style="padding:0 7px">${bad}</span>`:"";
+}
+
+// ===================================================================== Hari-H
+let HH=null,HHOPEN={};
+try{$("hhNama").value=localStorage.getItem("hhNama")||""}catch(e){}
+const HH_CEK={
+  etcd5:["etcd 5/5 sehat",(s)=>s.etcd.healthy===s.etcd.total&&s.etcd.total>=5],
+  konfig:["Konfigurasi node seragam",()=>KF&&KF.baris?KF.baris.length>0&&!KF.baris.some(b=>b.status==="BEDA"||b.status==="SALAH"):null],
+  cekpenuh:["Cek semua tabel tanpa BEDA",()=>{const m=CPRUNS[0];return m?m.status==="selesai"&&!m.jumlah.BEDA&&!m.jumlah.UNLOGGED:null}],
+  backup_prod:["Backup produksi < 26 jam",()=>{const s=((BK||{}).stanza||[]).find(x=>x.nama===(BK||{}).stanza_lama);return s?s.umur_terakhir!=null&&s.umur_terakhir<26*3600:null}],
+  standby_ok:["Standby Leader + Replica",(s)=>s.nodes.some(n=>n.role==="standby_leader")&&s.nodes.every(n=>n.in_cluster)],
+  lag0:["Lag replica 0",(s)=>s.nodes.filter(n=>n.name!==s.leader).every(n=>n.in_cluster&&(n.lag_mb||0)===0)],
+  tanpa_pause:["Tanpa maintenance mode",(s)=>!s.paused],
+  aman:["Dashboard AMAN",(s)=>s.level==="ok"],
+  prod_readonly:["Produksi hanya-baca",(s)=>s.produksi&&s.produksi.ok?s.produksi.read_only:null],
+  prod_arsip:["Arsip WAL produksi tidak gagal",(s)=>{const a=(s.produksi||{}).arsip;return a?!(a.gagal_umur_detik!=null&&(a.umur_detik==null||a.gagal_umur_detik<a.umur_detik)):null}],
+  selisih0:["Selisih ke produksi 0 MB",(s)=>s.produksi&&s.produksi.ok?s.nodes.every(n=>n.behind_prod_mb===0):null],
+  leader_utama:["Pemimpin = Leader (bukan standby)",(s)=>s.nodes.some(n=>["leader","master","primary"].includes(n.role))],
+  bisa_tulis:["Jalur tulis bisa menulis",(s)=>s.utama&&s.utama.ok?!s.utama.recovery&&!s.utama.read_only:null],
+  replika_streaming:["Replica streaming",(s)=>s.nodes.filter(n=>n.name!==s.leader).every(n=>n.rep_status==="streaming")],
+  arsip_cluster:["Arsip WAL cluster jalan",(s)=>{const a=((s.utama||{}).arsip);return a?a.jumlah>0&&!(a.gagal_umur_detik!=null&&(a.umur_detik==null||a.gagal_umur_detik<a.umur_detik)):null}],
+  mode_sesudah:["Dashboard mode sesudah ([produksi] aktif = no)",(s)=>s.mode==="sesudah"],
+  tulis_satu:["Jalur tulis tepat 1 server di tiap HAProxy",(s)=>Object.entries(s.haproxy).filter(([n])=>!n.startsWith("VIP")).every(([n,h])=>h.ok&&h.tulis.filter(x=>(x.status||"").startsWith("UP")).length===1)],
+  vip_pemimpin:["Alamat dipegang node pemimpin",(s)=>{const v=Object.values(s.vip||{});return v.length?v.every(h=>h===s.leader):null}],
+  backup_cluster:["Full backup cluster ada",()=>{const s=((BK||{}).stanza||[]).find(x=>x.nama===(BK||{}).stanza_cluster);return s?s.jumlah.full>0:null}],
+};
+async function hh(){try{HH=await j("/api/harih");hhRender()}catch(e){}setTimeout(hh,5000)}
+async function hhAksi(b){b.nama=($("hhNama").value||"").trim();const r=await j("/api/harih",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+  if(r.error)alert(r.error);HH=await j("/api/harih");hhRender()}
+function salin(btn){const t=btn.parentElement.dataset.cmd,ok=()=>{btn.textContent="tersalin";setTimeout(()=>btn.textContent="Salin",1200)};
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(ok).catch(()=>{});return}
+  const a=document.createElement("textarea");a.value=t;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();
+  try{document.execCommand("copy");ok()}catch(e){}a.remove()}
+function hhChips(ids){const s=STATE_S;if(!s||!ids||!ids.length)return"";return ids.map(k=>{const c=HH_CEK[k];if(!c)return"";let v=null;try{v=c[1](s)}catch(e){}
+  return `<span class="chip l-${v===true?"ok":v===false?"warn":"info"}">${v===true?"✓":v===false?"✗":"?"} ${esc(c[0])}</span>`}).join("")}
+function hhRender(){const d=HH;if(!d)return;const st=d.status,L=st.langkah,now=d.sekarang,adm=!document.body.classList.contains("viewer");
+  const g0=(L.l2||{}).mulai,g1=(L.l10||{}).selesai;
+  const sel=d.rencana.filter(x=>x.id!=="pra");const done=sel.filter(x=>["selesai","lewati"].includes((L[x.id]||{}).status)).length;
+  let head=st.mulai?`<span class="pill l-${st.selesai?"ok":"info"}">${st.selesai?"SELESAI":"BERJALAN"}</span> mulai <b>${fmtDT(st.mulai)}</b>${st.selesai?" · selesai <b>"+fmtDT(st.selesai)+"</b>":""} · ${done}/${sel.length} langkah`:'<span class="pill l-info">BELUM DIMULAI</span>';
+  if(g0){const dur=(g1||now)-g0;head+=` · gangguan layanan <b>${durTxt(Math.round(dur))}</b>${g1?" (berakhir)":" (berjalan)"}`;
+    if(!g1&&!(L.l8||{}).selesai){const sisa=1800-(now-g0);head+=` · <span class="${sisa<600?"err":""}">batas keputusan jalan mundur: <b>${sisa>0?durTxt(Math.round(sisa))+" lagi":"LEWAT"}</b></span>`}}
+  if(st.mundur)head+=` · <span class="pill l-crit">JALAN MUNDUR ${esc(st.mundur.jalur)}</span>`;
+  $("hhHead").innerHTML=head;$("hhMulai").disabled=!!st.mulai;
+  $("hhBadge").innerHTML=st.mulai&&!st.selesai?'<span class="pill l-info" style="padding:0 7px">●</span>':"";
+  $("hhBar").innerHTML=sel.map(x=>`<div class="seg ${(L[x.id]||{}).status||""}" title="${esc(x.judul)}"></div>`).join("");
+  const firstOpen=d.rencana.find(x=>x.id!=="pra"&&!["selesai","lewati"].includes((L[x.id]||{}).status));
+  // simpan keadaan buka/tutup & isi catatan yang sedang diketik
+  document.querySelectorAll("#hhSteps details").forEach(e=>HHOPEN[e.dataset.id]=e.open);
+  const fokus=document.activeElement&&document.activeElement.dataset.cat;const draft=fokus?document.activeElement.value:null;
+  $("hhSteps").innerHTML=d.rencana.map(x=>{const s=L[x.id]||{bukti:{}},status=s.status||"belum";
+    const open=HHOPEN[x.id]!==undefined?HHOPEN[x.id]:(status==="berjalan"||(firstOpen&&firstOpen.id===x.id));
+    const nb=x.bukti.length,cb=Object.keys(s.bukti||{}).length;
+    const lama=s.mulai?durTxt(Math.round((s.selesai||now)-s.mulai)):"";
+    const tanda=x.tanda==="gangguan_mulai"?' <span class="badge l-warn">gangguan mulai</span>':x.tanda==="gangguan_selesai"?' <span class="badge l-ok">gangguan berakhir</span>':x.tanda==="titik_kembali"?' <span class="badge l-crit">setelah ini pembatalan tidak sederhana</span>':"";
+    return `<details class="step s-${status}" data-id="${x.id}" ${open?"open":""}><summary>
+      <span class="pill l-${{selesai:"ok",berjalan:"info",gagal:"crit",lewati:"info",belum:"info"}[status]}" style="min-width:76px;text-align:center">${status.toUpperCase()}</span>
+      <b>${esc(x.judul)}</b>${tanda}<span class="muted small">${x.durasi?"rencana "+x.durasi+" mnt":""}${lama?" · "+(s.selesai?"":"berjalan ")+lama:""}${nb?` · bukti ${cb}/${nb}`:""}</span>
+      <span class="sp"></span><span class="small muted">${s.mulai?fmtT(s.mulai):""}${s.selesai?" – "+fmtT(s.selesai):""}${s.oleh?" · "+esc(s.oleh):""}</span></summary>
+     <div class="body"><div class="small"><span class="muted">Di mana:</span> ${esc(x.dimana)}</div>
+      ${x.otomatis&&x.otomatis.length?`<div style="margin:6px 0"><span class="small muted">Dilihat dashboard sekarang:</span> ${hhChips(x.otomatis)}</div>`:""}
+      ${x.jalankan?`<pre class="cmd" data-cmd="${esc(x.jalankan)}"><button onclick="salin(this)">Salin</button>${esc(x.jalankan)}</pre>`:""}
+      ${x.catatan?`<div class="small" style="margin:4px 0"><b>Catatan:</b> ${esc(x.catatan)}</div>`:""}
+      <div style="margin-top:6px"><div class="small muted">Harus terbukti:</div>${x.bukti.map((bk,i)=>{const c=(s.bukti||{})[i];
+        return `<label class="chk"><input type="checkbox" ${c?"checked":""} ${adm?"":"disabled"} onchange="hhAksi({aksi:'bukti',langkah:'${x.id}',no:${i},ok:this.checked})"><span>${esc(bk)}${c?` <span class="muted small">(${fmtT(c.t)} ${esc(c.oleh)})</span>`:""}</span></label>`}).join("")}</div>
+      ${x.gagal?`<div class="small" style="margin-top:6px"><b class="err">Bila gagal:</b> ${esc(x.gagal)}</div>`:""}
+      <div style="margin-top:8px">${adm?`<textarea data-cat="${x.id}" placeholder="catatan (pesan galat, keputusan, jam, dll.)" onblur="hhAksi({aksi:'catatan',langkah:'${x.id}',teks:this.value})">${esc(s.catatan||"")}</textarea>`:s.catatan?`<div class="small"><b>Catatan:</b> ${esc(s.catatan)}</div>`:""}</div>
+      <div class="row adm" style="margin-top:8px">
+        <button class="btn sec" onclick="hhAksi({aksi:'status',langkah:'${x.id}',status:'berjalan'})">Mulai</button>
+        <button class="btn" onclick="hhAksi({aksi:'status',langkah:'${x.id}',status:'selesai'})">Selesai</button>
+        <button class="btn red" onclick="hhAksi({aksi:'status',langkah:'${x.id}',status:'gagal'})">Gagal</button>
+        <button class="btn sec" onclick="hhAksi({aksi:'status',langkah:'${x.id}',status:'lewati'})">Lewati</button>
+        <button class="btn sec" onclick="hhAksi({aksi:'status',langkah:'${x.id}',status:'belum'})">Ulang</button></div>
+     </div></details>`}).join("");
+  if(fokus){const t=document.querySelector(`textarea[data-cat="${fokus}"]`);if(t){t.value=draft;t.focus()}}
+  $("hhMundur").innerHTML=d.mundur.map(m=>`<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="row" style="justify-content:space-between"><b>${esc(m.judul)}</b>
+    ${st.mundur&&st.mundur.jalur===m.id?`<span class="pill l-crit">DIPUTUSKAN ${fmtT(st.mundur.t)} · ${esc(st.mundur.oleh)}</span>`:`<button class="btn sec adm" style="padding:4px 10px" onclick="if(confirm('Catat keputusan JALAN MUNDUR ${m.id}?'))hhAksi({aksi:'mundur',jalur:'${m.id}'})">Putuskan ${m.id}</button>`}</div>
+    <pre class="cmd" data-cmd="${esc(m.isi)}"><button onclick="salin(this)">Salin</button>${esc(m.isi)}</pre></div>`).join("")+
+    (st.mundur?`<button class="btn sec adm" style="margin-top:8px" onclick="hhAksi({aksi:'mundur',jalur:''})">Batalkan keputusan jalan mundur</button>`:"");
+  $("hhSesudah").innerHTML=d.sesudah_daftar.map(x=>{const c=st.sesudah[x.id];return `<label class="chk"><input type="checkbox" ${c?"checked":""} ${adm?"":"disabled"} onchange="hhAksi({aksi:'sesudah',id:'${x.id}',ok:this.checked})"><span>${esc(x.judul)}${c?` <span class="muted small">(${fmtDT(c.t)} ${esc(c.oleh)})</span>`:""}</span></label>`}).join("");
+}
+
+me().then(()=>{tick();hist();pollDC();rec();kf();cp();bk();hh()});
 setInterval(tick,3000);setInterval(hist,3000);
 </script>
 </body>

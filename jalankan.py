@@ -112,9 +112,7 @@ def main():
         print(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} HA Helper {__version__} mulai ===", flush=True)
     from hahelper.secret import Store
     if not os.path.exists(a.config):
-        contoh = os.path.join(HERE, "config.contoh.ini")
-        hint = f"\nSalin {contoh} menjadi config.ini lalu sesuaikan." if os.path.exists(contoh) else ""
-        sys.exit(f"Berkas konfigurasi tidak ada: {a.config}{hint}")
+        sys.exit(f"Berkas konfigurasi tidak ada: {a.config}")
     store = Store(os.path.join(DATA, "sandi.dat"))
 
     if a.simpan_sandi:

@@ -15,11 +15,11 @@ mkdir -p "$DST/data"
 if [ "$SRC" != "$DST" ]; then
   rm -rf "$DST/hahelper"
   cp -r "$SRC/hahelper" "$SRC/jalankan.py" "$DST/"
-  CFG="$SRC/config.ini"; [ -f "$CFG" ] || CFG="$SRC/config.contoh.ini"
+  cp "$SRC/linux/PANDUAN-WITNESS.txt" "$DST/" 2>/dev/null || true
   if [ "$UPGRADE" = yes ]; then
-    cp "$CFG" "$DST/config.ini.baru"
+    cp "$SRC/config.ini" "$DST/config.ini.baru"
   else
-    cp "$CFG" "$DST/config.ini"
+    cp "$SRC/config.ini" "$DST/config.ini"
   fi
 fi
 sed -i 's/\r$//' "$DST"/config.ini*

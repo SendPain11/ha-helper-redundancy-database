@@ -11,12 +11,15 @@ from urllib.parse import parse_qs, urlparse
 from . import config as cfgmod
 from .auth import Auth
 from .datacheck import DataCheck
+from .cekpenuh import CekPenuh
+from .harih import HariH
+from .konfig import Konfig
 from .monitor import Monitor
 from .recorder import Recorder
 
 WEBDIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 COOKIE = "hahelper"
-ADMIN_ONLY = ("/api/cekdata", "/api/rekam/mulai", "/api/rekam/selesai", "/api/email/uji")
+ADMIN_ONLY = ("/api/cekdata", "/api/rekam/mulai", "/api/rekam/selesai", "/api/email/uji", "/api/harih")
 
 
 def _page(name):
@@ -40,7 +43,8 @@ def make_handler(app):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
+            if "Cache-Control" not in (extra or {}):
+                self.send_header("Cache-Control", "no-store")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("X-Content-Type-Options", "nosniff")
             for k, v in (extra or {}).items():
@@ -49,7 +53,7 @@ def make_handler(app):
             self.wfile.write(data)
 
         def _body(self):
-            n = min(int(self.headers.get("Content-Length") or 0), 65536)
+            n = min(int(self.headers.get("Content-Length") or 0), 262144)
             try:
                 return json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
@@ -72,6 +76,8 @@ def make_handler(app):
         def do_GET(self):
             u = urlparse(self.path)
             q = parse_qs(u.query)
+            if u.path in ("/favicon.ico", "/favicon.svg", "/logo.svg"):
+                return self._send(200, _page("logo.svg"), "image/svg+xml", {"Cache-Control": "max-age=86400"})
             if u.path == "/masuk":
                 return self._send(200, _page("masuk.html"), "text/html; charset=utf-8")
             s = self._session()
@@ -96,6 +102,32 @@ def make_handler(app):
                 return self._send(200, app["mon"].history.since(since)[-500:])
             if u.path == "/api/cekdata":
                 return self._send(200, app["dc"].result or {})
+            if u.path == "/api/konfig":
+                with app["kf"].lock:
+                    return self._send(200, app["kf"].hasil)
+            if u.path == "/api/backup":
+                with app["kf"].lock:
+                    return self._send(200, app["kf"].backup)
+            if u.path == "/api/cekpenuh":
+                run = (q.get("run") or [""])[0]
+                if run:
+                    r = app["cp"].ambil(run)
+                    return self._send(200 if r else 404, r or {"error": "tidak ada"})
+                return self._send(200, app["cp"].daftar())
+            if u.path == "/api/cekpenuh/csv":
+                r = app["cp"].ambil((q.get("run") or [""])[0])
+                if not r:
+                    return self._send(404, {"error": "tidak ada"})
+                rows = ["tabel;ukuran;hasil;baris_produksi;" + ";".join("baris_" + n for n in r["node"]) + ";catatan"]
+                rows += [";".join([t["tabel"], t["ukuran"], t["hasil"], t["produksi"]] + t["node"] + [t["catatan"]]) for t in r["tabel"]]
+                return self._send(200, "\n".join(rows) + "\n", "text/csv; charset=utf-8",
+                                  {"Content-Disposition": f'attachment; filename="cek-semua-tabel-{r["run"]}.csv"'})
+            if u.path == "/api/harih":
+                return self._send(200, app["hh"].data())
+            if u.path == "/api/harih/laporan":
+                txt = app["hh"].laporan(list(app["mon"].history.items))
+                return self._send(200, txt, "text/plain; charset=utf-8",
+                                  {"Content-Disposition": f'attachment; filename="laporan-hari-h-{time.strftime("%Y%m%d-%H%M")}.txt"'})
             if u.path == "/api/rekam":
                 r = app["rec"].live()
                 r["daftar"] = app["rec"].list_reports()[:20]
@@ -113,8 +145,17 @@ def make_handler(app):
         # ---------------------------------------------------------------- POST
         def do_POST(self):
             u = urlparse(self.path)
-            b = self._body()
             ip = self.client_address[0]
+            if u.path == "/api/cekpenuh/lapor":  # dari cek-semua-tabel.sh di node: token, bukan login
+                n = min(int(self.headers.get("Content-Length") or 0), 262144)
+                teks = self.rfile.read(n).decode("utf-8", "replace")
+                code, res = app["cp"].terima(ip, self.headers.get("X-Token"), self.headers.get("X-Run"),
+                                             self.headers.get("X-Jenis"), teks)
+                return self._send(code, res)
+            b = self._body()
+            if u.path == "/api/konfig/lapor":  # dari pelapor di node: pakai token, bukan login
+                code, res = app["kf"].terima(ip, self.headers.get("X-Token"), b)
+                return self._send(code, res)
             if u.path == "/api/masuk":
                 tok, info = auth.login(ip, str(b.get("pengguna", "")), str(b.get("sandi", "")))
                 if not tok:
@@ -145,6 +186,10 @@ def make_handler(app):
                     app["mon"].history.add("info", "Perekaman uji failover selesai",
                                            f"tanpa pemimpin {r['tanpa_pemimpin']} dtk, jalur tulis putus {r['tulis_putus']} dtk; laporan {name}")
                 return self._send(200, {"laporan": name})
+            if u.path == "/api/harih":
+                nama = str(b.get("nama", "")).strip()[:40]
+                code, res = app["hh"].aksi(b, s["user"] + (f" ({nama})" if nama else ""))
+                return self._send(code, res)
             if u.path == "/api/email/uji":
                 res = app["mon"].alert.send("Uji email dashboard", "Ini email uji dari HA Helper.\nBila sampai, peringatan email berfungsi.", force=True)
                 return self._send(200, {"hasil": res})
@@ -167,8 +212,14 @@ def local_ip(cfg):
 
 def serve(cfg, datadir):
     mon = Monitor(cfg, datadir)
-    app = {"cfg": cfg, "mon": mon, "dc": DataCheck(cfg), "rec": Recorder(cfg, datadir), "auth": Auth(cfg)}
+    kf = Konfig(cfg, datadir, mon)
+    mon.konfig = kf
+    cp = CekPenuh(cfg, datadir, kf.token, mon.history)
+    kf.cekpenuh = cp
+    app = {"cfg": cfg, "mon": mon, "dc": DataCheck(cfg), "rec": Recorder(cfg, datadir), "auth": Auth(cfg), "kf": kf,
+           "cp": cp, "hh": HariH(datadir, mon.history)}
     mon.start()
+    kf.start()
     ThreadingHTTPServer.daemon_threads = True
     httpd = ThreadingHTTPServer((cfg.listen, cfg.port), make_handler(app))
     url = f"http://{'127.0.0.1' if cfg.listen in ('0.0.0.0', '') else cfg.listen}:{cfg.port}"

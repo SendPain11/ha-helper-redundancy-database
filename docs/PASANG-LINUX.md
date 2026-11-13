@@ -52,6 +52,29 @@ Buka `http://<IP-SERVER>:8099`.
 | `sudo ha-helper sandi` | ganti sandi lalu mulai ulang |
 | `sudo ha-helper ulang` / `hidup` / `mati` | mulai ulang / nyalakan / matikan |
 
+## Pelapor konfigurasi di node (opsional, disarankan)
+
+Untuk tab **Konfigurasi Node** dan **Backup**. Di server dashboard: `sudo ha-helper token`.
+Lalu di setiap node cluster (database & witness):
+
+```bash
+sudo bash linux/pasang-lapor.sh http://<IP-dashboard>:8099 <token>
+```
+
+Pelapor hanya membaca dan mengirim ringkasan (versi, nilai penting, sidik md5 berkas) tiap
+5 menit. Node harus bisa menjangkau porta 8099 server dashboard.
+Copot: `sudo bash linux/pasang-lapor.sh hapus`.
+
+## Cek semua tabel
+
+Di node database yang sudah terpasang pelapor (hasil ikut tampil di dashboard):
+
+```bash
+MULAI=01:00 LATAR=1 sudo bash linux/cek-semua-tabel.sh
+```
+
+Membaca seluruh isi database di server sumber dan tiap node: jalankan di jam sepi.
+
 ## Memperbarui versi
 
 ```bash

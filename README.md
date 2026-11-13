@@ -15,8 +15,12 @@ di server sumber. Tanpa pustaka tambahan: cukup Python 3.8+.
 |---|---|
 | **Ringkasan** | Pemimpin, peran & lag tiap node, kesehatan etcd, server aktif di HAProxy tiap node, pemegang VIP, dan daftar temuan beserta perintah perbaikannya |
 | **Streaming & Data** | Posisi tiap node terhadap server sumber; tombol cek yang menghitung data baru di sumber lalu mencocokkannya lewat jalur tulis & jalur baca cluster |
+| **Cek Semua Tabel** | Hasil `linux/cek-semua-tabel.sh`: jumlah **dan isi** setiap baris di seluruh tabel, server sumber vs tiap node; COCOK / BERUBAH / AKTIF / BEDA / UNLOGGED, perkiraan sisa waktu, unduh CSV |
+| **Backup** | Status pgBackRest (backup terakhir, full mingguan, isi NAS, retensi, log cron) dan arsip WAL; otomatis menilai stanza lama sebelum cutover dan stanza cluster sesudahnya |
 | **Uji Failover** | Perekam keadaan cluster per detik selama uji: lama tanpa pemimpin, lama jalur tulis putus, lama koneksi gagal; laporan `.txt` siap dilampirkan |
-| **Riwayat & Peringatan** | Semua kejadian (pemimpin pindah, node keluar/masuk, VIP pindah, etcd bermasalah), bunyi & notifikasi browser, email |
+| **Hari-H** | Daftar periksa pelaksanaan cutover: tiap langkah dicatat jam, nama pelaksana, bukti & catatan; indikator otomatis dari keadaan cluster; batas waktu jalan mundur; laporan `.txt` untuk atasan |
+| **Konfigurasi Node** | Keseragaman konfigurasi antar node (hosts, etcd, Patroni, HAProxy, keepalived, pgBackRest, cron, ufw, NTP) dari pelapor di tiap node + pengaturan PostgreSQL pemimpin vs replica; BEDA / SALAH ditandai |
+| **Riwayat & Peringatan** | Semua kejadian (pemimpin pindah, node keluar/masuk, VIP pindah, etcd bermasalah — kedipan sesaat dipisahkan), bunyi & notifikasi browser, email |
 
 - Login dua peran: **admin** (akses penuh) dan **lihat** (hanya melihat).
   Salah sandi 5 kali → IP dikunci 5 menit.
@@ -46,6 +50,9 @@ Komputer yang menjalankan dashboard harus bisa menjangkau:
 | HAProxy / VIP | 5432, 5434 | Jalur tulis & baca (cek data, uji koneksi) |
 | Server sumber | 5432 | Hanya bila cluster masih standby dari server lain |
 
+Arah sebaliknya (opsional): pelapor di tiap node mengirim ke dashboard lewat
+porta **8099** (`linux/pasang-lapor.sh`, cron 5 menit, hanya membaca, tanpa sandi).
+
 Untuk cek data, dashboard memakai pengguna PostgreSQL yang bisa membaca tabel
 di `[tabel_cek_data]`. Disarankan membuat pengguna khusus yang hanya-baca.
 
@@ -55,9 +62,11 @@ di `[tabel_cek_data]`. Disarankan membuat pengguna khusus yang hanya-baca.
 jalankan.py            program utama
 config.contoh.ini      contoh konfigurasi (salin menjadi config.ini)
 hahelper/              kode: pgwire (klien PostgreSQL sendiri), collect, diagnose,
-                       monitor, datacheck, recorder, auth, secret, server, web/
+                       monitor, datacheck, recorder, konfig, backup, cekpenuh,
+                       harih, auth, secret, server, web/
 *.bat, windows/        skrip Windows (jalan manual / jalan terus di latar)
-linux/                 skrip Linux (systemd, perintah ha-helper)
+linux/                 skrip Linux (systemd, perintah ha-helper), pelapor node
+                       (hahelper-lapor.py, pasang-lapor.sh), cek-semua-tabel.sh
 data/                  dibuat otomatis: riwayat, laporan, sandi tersimpan (tidak di-upload)
 ```
 

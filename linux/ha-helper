@@ -4,10 +4,11 @@ D=/opt/ha-helper
 [ "$(id -u)" = 0 ] || { echo "Pakai sudo: sudo ha-helper $*"; exit 1; }
 case "$1" in
   status) systemctl status ha-helper --no-pager -l | head -15 ;;
-  cek)    cd "$D" && sudo -u hahelper python3 jalankan.py --cek ;;
-  sandi)  cd "$D" && sudo -u hahelper python3 jalankan.py --simpan-sandi && systemctl restart ha-helper && echo "Dashboard dimulai ulang." ;;
+  cek)    cd "$D" && runuser -u hahelper -- python3 jalankan.py --cek ;;
+  sandi)  cd "$D" && runuser -u hahelper -- python3 jalankan.py --simpan-sandi && systemctl restart ha-helper && echo "Dashboard dimulai ulang." ;;
   config) ${EDITOR:-nano} "$D/config.ini" && sed -i 's/\r$//' "$D/config.ini" && systemctl restart ha-helper && echo "Dashboard dimulai ulang." ;;
   ulang)  systemctl restart ha-helper && echo "Dashboard dimulai ulang." ;;
+  token)  cat "$D/data/konfig-token" 2>/dev/null || echo "Belum ada. Jalankan dulu dashboard-nya (sudo ha-helper ulang)." ;;
   log)    journalctl -u ha-helper -n "${2:-40}" --no-pager ;;
   hidup)  systemctl enable --now ha-helper ;;
   mati)   systemctl disable --now ha-helper ;;
@@ -18,6 +19,7 @@ Pemakaian: sudo ha-helper <perintah>
   sandi    simpan/ganti sandi (HAProxy, postgres, email), lalu mulai ulang
   config   ubah config.ini, lalu mulai ulang
   ulang    mulai ulang dashboard
+  token    tampilkan token untuk pelapor konfigurasi di node
   log      40 baris catatan terakhir  (log 200 = 200 baris)
   hidup    nyalakan dan jalankan otomatis saat server menyala
   mati     matikan dan jangan jalan otomatis

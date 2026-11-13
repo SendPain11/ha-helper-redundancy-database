@@ -60,6 +60,11 @@ def load(path, ask=True, store=None):
     c.mail_to = [x.strip() for x in e.get("penerima", "").split(",") if x.strip()]
     c.mail_min = e.get("kirim_mulai_level", "warn")
 
+    bk = cp["backup"] if cp.has_section("backup") else {}
+    c.stanza_cluster = (bk.get("stanza_cluster") or "cluster").strip()   # stanza pgBackRest cluster (sesudah cutover)
+    c.stanza_lama = (bk.get("stanza_lama") or "backup_lama").strip()     # stanza backup server lama (sebelum cutover)
+    k = cp["konfig"] if cp.has_section("konfig") else {}
+    c.konfig_token = (k.get("token") or "").strip()
     a = cp["akses"] if cp.has_section("akses") else {}
     c.admin_user = (a.get("admin_pengguna") or "admin").strip()
     c.admin_pass = (a.get("admin_sandi") or "").strip()
