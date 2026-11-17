@@ -75,6 +75,22 @@ MULAI=01:00 LATAR=1 sudo bash linux/cek-semua-tabel.sh
 
 Membaca seluruh isi database di server sumber dan tiap node: jalankan di jam sepi.
 
+Cek cepat (kurang dari 1 menit, aman di jam kerja / di dalam downtime cutover):
+
+```bash
+sudo CEPAT=1 bash linux/cek-semua-tabel.sh
+```
+
+Terjadwal lewat cron (sandi disimpan sekali di `/root/.pgpass-cek-semua`, hanya root):
+
+```bash
+sudo JADWAL="0 2 * * 2,3" bash linux/pasang-jadwal-cek.sh     # Selasa & Rabu 02:00
+sudo bash linux/pasang-jadwal-cek.sh hapus
+```
+
+Sesudah cutover (server sumber sudah mati): `sudo PROD_HOST=pemimpin bash linux/cek-semua-tabel.sh`
+membandingkan pemimpin cluster dengan replica.
+
 ## Memperbarui versi
 
 ```bash

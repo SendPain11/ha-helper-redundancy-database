@@ -1,5 +1,18 @@
 # Riwayat perubahan
 
+## 4.1.0
+- `cek-semua-tabel.sh`: mode **CEK CEPAT** (`CEPAT=1`, kurang dari 1 menit) untuk dipakai di dalam
+  downtime: selisih posisi replikasi, daftar tabel, sequence; kesimpulan "boleh lanjut / jangan lanjut"
+- `cek-semua-tabel.sh`: `PROD_HOST=pemimpin` untuk sesudah cutover - acuan = pemimpin cluster
+  (dicari lewat patronictl), dibandingkan dengan semua replica
+- `cek-semua-tabel.sh`: sandi dari `.pgpass` bila tidak ada layar (cron); cek sequence & large object
+- `linux/pasang-jadwal-cek.sh`: jadwalkan cek semua tabel lewat cron (sekali atau berkala), dicabut
+  dengan `hapus`
+- Daftar periksa Hari-H versi 2: tahap A (persiapan, pindah pemimpin), B (downtime), C (pindah VM
+  node kedua ke host lain tanpa downtime); jam rencana per langkah; penanda awal/akhir downtime
+  diatur dari rencana; catatan rencana lama diarsipkan otomatis
+- Pelapor: nama anggota di `/etc/default/etcd` dibaca dari `nama=http://` dan `ETCD_NAME`
+
 ## 4.0.0
 - Tab **Konfigurasi Node**: pelapor di tiap node (cron 5 menit, hanya membaca, tanpa sandi)
   membandingkan hosts, etcd (termasuk `/etc/default/etcd` dan sumber konfigurasi), Patroni,

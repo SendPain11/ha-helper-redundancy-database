@@ -218,8 +218,8 @@ textarea{width:100%;font:inherit;font-size:13px;padding:7px 10px;border:1px soli
   <div class="card"><h2>Cara menjalankan</h2>
     <ol class="steps small">
       <li>Di db-node1 atau db-node2 (yang sudah terpasang pelapor, supaya hasil terkirim ke sini): salin <code>cek-semua-tabel.sh</code> ke <code>/tmp</code>.</li>
-      <li>Malam hari, setelah backup 23:00: <code>MULAI=01:00 LATAR=1 sudo bash /tmp/cek-semua-tabel.sh</code></li>
-      <li>Kemajuan muncul di halaman ini. Ulang yang belum COCOK: <code>TABEL_FILE=/var/log/cek-semua/&lt;waktu&gt;/ulang.txt sudo bash /tmp/cek-semua-tabel.sh</code></li>
+      <li>Malam hari, setelah backup 23:00: <code>sudo MULAI=01:00 LATAR=1 bash /tmp/cek-semua-tabel.sh</code></li>
+      <li>Kemajuan muncul di halaman ini. Ulang yang belum COCOK: <code>sudo TABEL_FILE=/var/log/cek-semua/&lt;waktu&gt;/ulang.txt bash /tmp/cek-semua-tabel.sh</code></li>
     </ol>
     <p class="small muted">COCOK = jumlah & isi sama · BERUBAH = sempat beda karena sedang diubah, saat dicek ulang sama · AKTIF = terus diubah selama dicek (ulangi saat sepi / Hari-H) ·
       BEDA = beda padahal tidak diubah (MASALAH) · UNLOGGED = tidak direplikasi · GAGAL = tidak terbaca</p>
@@ -587,6 +587,7 @@ const HH_CEK={
   mode_sesudah:["Dashboard mode sesudah ([produksi] aktif = no)",(s)=>s.mode==="sesudah"],
   tulis_satu:["Jalur tulis tepat 1 server di tiap HAProxy",(s)=>Object.entries(s.haproxy).filter(([n])=>!n.startsWith("VIP")).every(([n,h])=>h.ok&&h.tulis.filter(x=>(x.status||"").startsWith("UP")).length===1)],
   vip_pemimpin:["Alamat dipegang node pemimpin",(s)=>{const v=Object.values(s.vip||{});return v.length?v.every(h=>h===s.leader):null}],
+  pemimpin_rencana:["Pemimpin = node sesuai rencana",(s,x)=>x&&x.pemimpin?s.leader===x.pemimpin:null],
   backup_cluster:["Full backup cluster ada",()=>{const s=((BK||{}).stanza||[]).find(x=>x.nama===(BK||{}).stanza_cluster);return s?s.jumlah.full>0:null}],
 };
 async function hh(){try{HH=await j("/api/harih");hhRender()}catch(e){}setTimeout(hh,5000)}
@@ -596,14 +597,15 @@ function salin(btn){const t=btn.parentElement.dataset.cmd,ok=()=>{btn.textConten
   if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t).then(ok).catch(()=>{});return}
   const a=document.createElement("textarea");a.value=t;a.style.position="fixed";a.style.opacity="0";document.body.appendChild(a);a.select();
   try{document.execCommand("copy");ok()}catch(e){}a.remove()}
-function hhChips(ids){const s=STATE_S;if(!s||!ids||!ids.length)return"";return ids.map(k=>{const c=HH_CEK[k];if(!c)return"";let v=null;try{v=c[1](s)}catch(e){}
+function hhChips(ids,x){const s=STATE_S;if(!s||!ids||!ids.length)return"";return ids.map(k=>{const c=HH_CEK[k];if(!c)return"";let v=null;try{v=c[1](s,x)}catch(e){}
   return `<span class="chip l-${v===true?"ok":v===false?"warn":"info"}">${v===true?"✓":v===false?"✗":"?"} ${esc(c[0])}</span>`}).join("")}
 function hhRender(){const d=HH;if(!d)return;const st=d.status,L=st.langkah,now=d.sekarang,adm=!document.body.classList.contains("viewer");
-  const g0=(L.l2||{}).mulai,g1=(L.l10||{}).selesai;
+  const T={};d.rencana.forEach(x=>{if(x.tanda)T[x.tanda]=x.id});
+  const g0=(L[T.gangguan_mulai]||{}).mulai,g1=(L[T.gangguan_selesai]||{}).selesai;
   const sel=d.rencana.filter(x=>x.id!=="pra");const done=sel.filter(x=>["selesai","lewati"].includes((L[x.id]||{}).status)).length;
   let head=st.mulai?`<span class="pill l-${st.selesai?"ok":"info"}">${st.selesai?"SELESAI":"BERJALAN"}</span> mulai <b>${fmtDT(st.mulai)}</b>${st.selesai?" · selesai <b>"+fmtDT(st.selesai)+"</b>":""} · ${done}/${sel.length} langkah`:'<span class="pill l-info">BELUM DIMULAI</span>';
   if(g0){const dur=(g1||now)-g0;head+=` · gangguan layanan <b>${durTxt(Math.round(dur))}</b>${g1?" (berakhir)":" (berjalan)"}`;
-    if(!g1&&!(L.l8||{}).selesai){const sisa=1800-(now-g0);head+=` · <span class="${sisa<600?"err":""}">batas keputusan jalan mundur: <b>${sisa>0?durTxt(Math.round(sisa))+" lagi":"LEWAT"}</b></span>`}}
+    if(!g1&&!(L[T.titik_kembali]||{}).selesai){const sisa=1800-(now-g0);head+=` · <span class="${sisa<600?"err":""}">batas keputusan jalan mundur: <b>${sisa>0?durTxt(Math.round(sisa))+" lagi":"LEWAT"}</b></span>`}}
   if(st.mundur)head+=` · <span class="pill l-crit">JALAN MUNDUR ${esc(st.mundur.jalur)}</span>`;
   $("hhHead").innerHTML=head;$("hhMulai").disabled=!!st.mulai;
   $("hhBadge").innerHTML=st.mulai&&!st.selesai?'<span class="pill l-info" style="padding:0 7px">●</span>':"";
@@ -617,12 +619,13 @@ function hhRender(){const d=HH;if(!d)return;const st=d.status,L=st.langkah,now=d
     const nb=x.bukti.length,cb=Object.keys(s.bukti||{}).length;
     const lama=s.mulai?durTxt(Math.round((s.selesai||now)-s.mulai)):"";
     const tanda=x.tanda==="gangguan_mulai"?' <span class="badge l-warn">gangguan mulai</span>':x.tanda==="gangguan_selesai"?' <span class="badge l-ok">gangguan berakhir</span>':x.tanda==="titik_kembali"?' <span class="badge l-crit">setelah ini pembatalan tidak sederhana</span>':"";
-    return `<details class="step s-${status}" data-id="${x.id}" ${open?"open":""}><summary>
+    const tahap=x.tahap?`<div class="small muted" style="text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px">Tahap ${esc(x.tahap)}</div>`:"";
+    return tahap+`<details class="step s-${status}" data-id="${x.id}" ${open?"open":""}><summary>
       <span class="pill l-${{selesai:"ok",berjalan:"info",gagal:"crit",lewati:"info",belum:"info"}[status]}" style="min-width:76px;text-align:center">${status.toUpperCase()}</span>
-      <b>${esc(x.judul)}</b>${tanda}<span class="muted small">${x.durasi?"rencana "+x.durasi+" mnt":""}${lama?" · "+(s.selesai?"":"berjalan ")+lama:""}${nb?` · bukti ${cb}/${nb}`:""}</span>
+      <b>${esc(x.judul)}</b>${tanda}<span class="muted small">${x.jam?esc(x.jam)+" · ":""}${x.durasi?"rencana "+x.durasi+" mnt":""}${lama?" · "+(s.selesai?"":"berjalan ")+lama:""}${nb?` · bukti ${cb}/${nb}`:""}</span>
       <span class="sp"></span><span class="small muted">${s.mulai?fmtT(s.mulai):""}${s.selesai?" – "+fmtT(s.selesai):""}${s.oleh?" · "+esc(s.oleh):""}</span></summary>
      <div class="body"><div class="small"><span class="muted">Di mana:</span> ${esc(x.dimana)}</div>
-      ${x.otomatis&&x.otomatis.length?`<div style="margin:6px 0"><span class="small muted">Dilihat dashboard sekarang:</span> ${hhChips(x.otomatis)}</div>`:""}
+      ${x.otomatis&&x.otomatis.length?`<div style="margin:6px 0"><span class="small muted">Dilihat dashboard sekarang:</span> ${hhChips(x.otomatis,x)}</div>`:""}
       ${x.jalankan?`<pre class="cmd" data-cmd="${esc(x.jalankan)}"><button onclick="salin(this)">Salin</button>${esc(x.jalankan)}</pre>`:""}
       ${x.catatan?`<div class="small" style="margin:4px 0"><b>Catatan:</b> ${esc(x.catatan)}</div>`:""}
       <div style="margin-top:6px"><div class="small muted">Harus terbukti:</div>${x.bukti.map((bk,i)=>{const c=(s.bukti||{})[i];

@@ -2,10 +2,12 @@
 # CEK SEMUA TABEL - produksi vs SEMUA node cluster: JUMLAH baris + ISI setiap baris, SELURUH tabel.
 #
 #   sudo bash /tmp/cek-semua-tabel.sh                 di db-node1 atau db-node2 (ditunggu di layar)
-#   LATAR=1 sudo bash /tmp/cek-semua-tabel.sh         jalan di latar; SSH boleh ditutup  (DISARANKAN)
-#   MULAI=01:00 LATAR=1 sudo bash ...                 sandi diisi sekarang, cek baru mulai pukul 01:00
-#   MAKS_GB=5 ...                                     lewati tabel > 5 GB (untuk percobaan pertama)
-#   TABEL_FILE=/var/log/cek-semua/<waktu>/ulang.txt ...   cek ulang hanya tabel yang belum COCOK
+#   sudo LATAR=1 bash /tmp/cek-semua-tabel.sh         jalan di latar; SSH boleh ditutup  (DISARANKAN)
+#   sudo MULAI=01:00 LATAR=1 bash ...                 sandi diisi sekarang, cek baru mulai pukul 01:00
+#   (pengaturan ditulis SESUDAH kata sudo; bila sudah root, sudo boleh dihilangkan)
+#   Terjadwal (cron, tanpa ditunggu): sandi di /root/.pgpass, lalu  /etc/cron.d/cek-semua-tabel
+#   sudo MAKS_GB=5 bash ...                                   lewati tabel > 5 GB (untuk percobaan pertama)
+#   sudo TABEL_FILE=/var/log/cek-semua/<waktu>/ulang.txt bash ...   cek ulang hanya tabel yang belum COCOK
 #
 # Bila pelapor HA Helper terpasang di node ini (/etc/hahelper-lapor.conf), kemajuan & hasil
 # otomatis tampil di dashboard, tab "Cek Semua Tabel". Tanpa pelapor, hasil hanya di berkas.
@@ -21,6 +23,9 @@
 #   BEDA     tetap beda padahal tabel TIDAK sedang diubah  -> MASALAH, kirim hasilnya
 #   UNLOGGED tabel UNLOGGED: TIDAK ikut direplikasi, isinya HILANG setelah pindah ke cluster
 #   GAGAL    tidak bisa dibaca (lihat galat.txt)
+#
+# Selain tabel juga dicek: posisi replikasi tiap node, large object (bila dipakai), dan
+# SEQUENCE (nilai di node tidak boleh di bawah produksi; boleh di atas, itu sifat replikasi).
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 DB=${DB:-appdb}; USR=${USR:-postgres}
 PROD_HOST=${PROD_HOST:-10.20.0.5}; PROD_PORT=${PROD_PORT:-5432}
@@ -53,14 +58,34 @@ except Exception: pass')
   [ -n "$NODES" ] || NODES=$CADANGAN
 fi
 
-if [ -z "$PW" ]; then read -s -p "Sandi $USR (produksi & cluster): " PW; echo; fi
-export PW
-q() { PGPASSWORD="$PW" psql -h "$1" -p "$2" -U $USR -d $DB -Atq -F'|' -c "$3" 2>>"$HASIL/galat.txt"; }
+# Sandi: ditanya di layar, ATAU (untuk cron) diambil psql dari /root/.pgpass
+ACUAN=Produksi
+if [ "$PROD_HOST" = pemimpin ]; then   # setelah Hari-H: acuan = pemimpin cluster saat ini
+  L=$(patronictl -c /etc/patroni/config.yml list -f json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    for x in json.load(sys.stdin):
+        if x.get("Role") in ("Leader", "Standby Leader"):
+            h = x.get("Host", ""); hp = h.split(":")
+            print("%s:%s" % (hp[0], hp[1] if len(hp) > 1 else "5433")); break
+except Exception: pass')
+  [ -n "$L" ] || { echo "Pemimpin cluster tidak ditemukan (patronictl)."; exit 1; }
+  PROD_HOST=${L%:*}; PROD_PORT=${L#*:}; ACUAN=Pemimpin
+fi
+if [ -z "$PW" ]; then
+  if [ -t 0 ] && [ "${PAKAI_PGPASS:-0}" != 1 ]; then read -s -p "Sandi $USR (produksi & cluster): " PW; echo
+  elif [ ! -s "${PGPASSFILE:-$HOME/.pgpass}" ]; then
+    echo "Tidak ada layar untuk menanyakan sandi dan ${PGPASSFILE:-$HOME/.pgpass} tidak ada. Lihat cara pasang jadwal."; exit 1
+  fi
+fi
+[ -n "$PW" ] && export PW
+q() { env ${PW:+PGPASSWORD="$PW"} psql -w -h "$1" -p "$2" -U $USR -d $DB -Atq -F'|' -c "$3" 2>>"$HASIL/galat.txt"; }
 
-q $PROD_HOST $PROD_PORT "SELECT 1" >/dev/null || { echo "GAGAL tersambung ke produksi $PROD_HOST:$PROD_PORT"; tail -3 "$HASIL/galat.txt"; exit 1; }
+q $PROD_HOST $PROD_PORT "SELECT 1" >/dev/null || { echo "GAGAL tersambung ke $ACUAN $PROD_HOST:$PROD_PORT"; tail -3 "$HASIL/galat.txt"; exit 1; }
 HIDUP=()
 for n in $NODES; do
   IFS=: read nama host port <<< "$n"
+  [ "$host:$port" = "$PROD_HOST:$PROD_PORT" ] && continue   # node acuan sendiri (pemimpin) tidak dibandingkan
   if [ "$(q $host $port "SELECT pg_is_in_recovery()")" = "t" ]; then HIDUP+=("$nama:$host:$port")
   else echo "  $nama ($host:$port) tidak terjangkau / bukan standby - DILEWATI"; fi
 done
@@ -71,7 +96,7 @@ done
 hitung() { local from="ONLY $3" out k
   [ "$4" = m ] && from="$3"
   for k in 1 2 3; do
-    out=$(PGPASSWORD="$PW" psql -h "$1" -p "$2" -U $USR -d $DB -Atq -F'|' -v ON_ERROR_STOP=1 2>>"$HASIL/galat.txt" <<SQL
+    out=$(env ${PW:+PGPASSWORD="$PW"} psql -w -h "$1" -p "$2" -U $USR -d $DB -Atq -F'|' -v ON_ERROR_STOP=1 2>>"$HASIL/galat.txt" <<SQL
 $SESI
 SELECT count(*)||'|'||$SIDIK FROM $from t;
 SQL
@@ -108,10 +133,19 @@ utama() {
   fi
   D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
   echo "== CEK SEMUA TABEL  $(date '+%F %T') =="
-  echo "   Produksi : $PROD_HOST:$PROD_PORT   database $DB"
+  printf "   %-9s: %s   database %s\n" "$ACUAN" "$PROD_HOST:$PROD_PORT" "$DB"
   echo "   Node     : ${HIDUP[*]}"
   echo "   Hasil    : $HASIL"
   [ -n "$HURL" ] && echo "   Dashboard: $HURL (tab Cek Semua Tabel)"
+  # ------------------------------------------------ posisi replikasi
+  echo; echo "== 0. POSISI REPLIKASI ============================================="
+  plsn=$(q $PROD_HOST $PROD_PORT "SELECT pg_current_wal_lsn()")
+  for n in "${HIDUP[@]}"; do IFS=: read nama host port <<< "$n"
+    printf "   %-13s: %s\n" "$nama" "$(q $host $port "SELECT 'tertinggal '||pg_size_pretty(greatest(pg_wal_lsn_diff('$plsn', pg_last_wal_replay_lsn()),0))||', transaksi terakhir diterapkan '||coalesce(to_char(pg_last_xact_replay_timestamp(),'YYYY-MM-DD HH24:MI:SS'),'-')")"
+  done
+  SELISIH_NOL=1; tl=$(susul)
+  if [ -n "$tl" ]; then SELISIH_NOL=0; echo "   >> $tl BELUM menyusul posisi ${ACUAN,,} setelah ${TUNGGU} detik"
+  else echo "   >> semua node sudah sampai posisi ${ACUAN,,} saat ini (SELISIH NOL)"; fi
   # ------------------------------------------------ daftar tabel
   INV="SELECT quote_ident(n.nspname)||'.'||quote_ident(c.relname), c.relkind, c.relpersistence,
          pg_total_relation_size(c.oid), pg_size_pretty(pg_total_relation_size(c.oid))
@@ -120,15 +154,15 @@ utama() {
          AND n.nspname !~ '^pg_(toast|temp)' ORDER BY 4, 1"
   q $PROD_HOST $PROD_PORT "$INV" > "$HASIL/daftar-produksi.txt"
   echo; echo "== 1. KELENGKAPAN TABEL ============================================"
-  echo "   Produksi : $(wc -l < "$HASIL/daftar-produksi.txt") tabel, total $(q $PROD_HOST $PROD_PORT "SELECT pg_size_pretty(pg_database_size('$DB'))")"
+  echo "   $ACUAN : $(wc -l < "$HASIL/daftar-produksi.txt") tabel, total $(q $PROD_HOST $PROD_PORT "SELECT pg_size_pretty(pg_database_size('$DB'))")"
   for n in "${HIDUP[@]}"; do IFS=: read nama host port <<< "$n"
     q $host $port "$INV" | cut -d'|' -f1 | sort > "$D/inv-$nama"
     kurang=$(cut -d'|' -f1 "$HASIL/daftar-produksi.txt" | sort | comm -23 - "$D/inv-$nama")
     lebih=$(cut -d'|' -f1 "$HASIL/daftar-produksi.txt" | sort | comm -13 - "$D/inv-$nama")
     printf "   %-13s: %s tabel" "$nama" "$(wc -l < "$D/inv-$nama")"
     KLG+="$nama $(wc -l < "$D/inv-$nama") tabel$([ -z "$kurang$lebih" ] && echo ' sama' || echo " BEDA (tidak ada di node: $(echo $kurang | head -c 300); hanya di node: $(echo $lebih | head -c 300))"); "
-    if [ -z "$kurang$lebih" ]; then echo "  - daftar SAMA dengan produksi"
-    else echo "  - BEDA!"; [ -n "$kurang" ] && echo "      tidak ada di node: $(echo $kurang)"; [ -n "$lebih" ] && echo "      hanya ada di node: $(echo $lebih)"; fi
+    if [ -z "$kurang$lebih" ]; then echo "  - daftar SAMA dengan ${ACUAN,,}"
+    else KL_BEDA=1; echo "  - BEDA!"; [ -n "$kurang" ] && echo "      tidak ada di node: $(echo $kurang)"; [ -n "$lebih" ] && echo "      hanya ada di node: $(echo $lebih)"; fi
   done
   # ------------------------------------------------ pilih tabel
   cp "$HASIL/daftar-produksi.txt" "$D/cek"
@@ -140,9 +174,14 @@ utama() {
     awk -F'|' -v m="$MAKS_GB" '$4 > m*1073741824 {print "      dilewati (>" m " GB): " $1 " " $5}' "$D/cek" | tee -a "$HASIL/dilewati.txt"
     awk -F'|' -v m="$MAKS_GB" '$4 <= m*1073741824' "$D/cek" > "$D/cek2"; mv "$D/cek2" "$D/cek"
   fi
+  if [ -z "$TABEL_FILE" ] && [ "$(q $PROD_HOST $PROD_PORT "SELECT count(*) > 0 FROM pg_largeobject_metadata")" = t ]; then
+    q $PROD_HOST $PROD_PORT "SELECT 'pg_catalog.pg_largeobject|r|p|'||pg_total_relation_size('pg_largeobject')||'|'||pg_size_pretty(pg_total_relation_size('pg_largeobject'))" >> "$D/cek"
+    echo "   + large object (pg_largeobject) ikut dicek"
+  fi
+  if [ "${CEPAT:-0}" = 1 ]; then : > "$D/cek"; echo "   CEK CEPAT: isi tabel tidak dibaca satu per satu (lihat cek penuh H-1)"; fi
   TOTAL=$(wc -l < "$D/cek"); BYTES=$(awk -F'|' '{s+=$4} END{printf "%.0f", s}' "$D/cek")
   kirim mulai "host=$(hostname -s)
-produksi=$PROD_HOST:$PROD_PORT
+produksi=$PROD_HOST:$PROD_PORT ($ACUAN)
 database=$DB
 node=$(for n in "${HIDUP[@]}"; do printf "%s," "${n%%:*}"; done | sed 's/,$//')
 total=$TOTAL
@@ -151,7 +190,7 @@ filter=${TABEL_FILE:+hanya tabel dari $(basename "$TABEL_FILE")}${MAKS_GB:+$([ "
 kelengkapan=$KLG
 hasil=$HASIL"
   echo; echo "== 2. ISI TIAP TABEL ($TOTAL tabel, dari yang terkecil) ==============="
-  printf "   %-9s %-45s %10s %14s  %s\n" "No" "Tabel" "Ukuran" "Baris prod" "Hasil"
+  printf "   %-9s %-45s %10s %14s  %s\n" "No" "Tabel" "Ukuran" "Baris ${ACUAN,,}" "Hasil"
   echo "tabel|ukuran|hasil|baris_produksi|baris_node ($(for n in "${HIDUP[@]}"; do printf "%s " "${n%%:*}"; done | sed 's/ $//; s/ /,/g'))|catatan" > "$HASIL/hasil.csv"
   : > "$HASIL/ulang.txt"
   declare -A JML=(); i=0; SELESAI_B=0; T0=$(date +%s)
@@ -193,11 +232,44 @@ hasil=$HASIL"
       "$(( $(date +%s) - t1 ))" "$sisa"
   done < "$D/cek"
 
+  # ------------------------------------------------ sequence
+  if [ -z "$TABEL_FILE" ]; then
+    echo; echo "== 2b. SEQUENCE (nilai di node harus >= ${ACUAN,,}) ===================="
+    SQ="SELECT quote_ident(schemaname)||'.'||quote_ident(sequencename)||'|'||coalesce(last_value::text,'-') FROM pg_sequences ORDER BY 1"
+    susul >/dev/null
+    q $PROD_HOST $PROD_PORT "$SQ" > "$D/seq-produksi"
+    sq_beda=0
+    for n in "${HIDUP[@]}"; do IFS=: read nama host port <<< "$n"
+      q $host $port "$SQ" > "$D/seq-$nama"
+      hasil_sq=$(awk -F'|' 'NR==FNR{p[$1]=$2;next} {n[$1]=$2}
+        END{for(k in p){ if(!(k in n)){print "tidak ada di node: " k; continue}
+                         if(p[k]!="-" && (n[k]=="-" || n[k]+0 < p[k]+0)) print "TERTINGGAL " k " produksi=" p[k] " node=" n[k]}}' "$D/seq-produksi" "$D/seq-$nama")
+      if [ -z "$hasil_sq" ]; then printf "   %-13s: %s sequence, semua sudah sama/di atas ${ACUAN,,}\n" "$nama" "$(wc -l < "$D/seq-$nama")"
+      else
+        # dicek ulang sekali: sequence bisa naik di produksi saat dibaca
+        sleep 5; susul >/dev/null; q $PROD_HOST $PROD_PORT "$SQ" > "$D/seq-produksi"; q $host $port "$SQ" > "$D/seq-$nama"
+        hasil_sq=$(awk -F'|' 'NR==FNR{p[$1]=$2;next} {n[$1]=$2}
+          END{for(k in p){ if(!(k in n)){print "tidak ada di node: " k; continue}
+                           if(p[k]!="-" && (n[k]=="-" || n[k]+0 < p[k]+0)) print "TERTINGGAL " k " produksi=" p[k] " node=" n[k]}}' "$D/seq-produksi" "$D/seq-$nama")
+        if [ -z "$hasil_sq" ]; then printf "   %-13s: %s sequence, sama/di atas ${ACUAN,,} (setelah dicek ulang)\n" "$nama" "$(wc -l < "$D/seq-$nama")"
+        else sq_beda=$((sq_beda + $(echo "$hasil_sq" | wc -l))); printf "   %-13s: BEDA\n" "$nama"; echo "$hasil_sq" | head -20 | sed 's/^/      /'
+          echo "$hasil_sq" | sed "s/^/$nama: /" >> "$HASIL/sequence-beda.txt"; fi
+      fi
+    done
+  fi
   kirim selesai "lama=$(( $(date +%s) - T0 ))"
   echo; echo "== 3. KESIMPULAN ($(date '+%F %T'), lama $(( ($(date +%s) - T0) / 60 )) menit) ======"
   for s in COCOK BERUBAH AKTIF BEDA UNLOGGED GAGAL; do [ -n "${JML[$s]}" ] && printf "   %-9s %s tabel\n" "$s" "${JML[$s]}"; done
-  if [ -z "${JML[BEDA]}${JML[GAGAL]}${JML[UNLOGGED]}${JML[AKTIF]}" ]; then
-    echo "   SEMUA tabel yang dicek SAMA (jumlah dan isi) antara produksi dan cluster."
+  if [ "${CEPAT:-0}" = 1 ]; then
+    printf "   %-22s %s\n" "Selisih ke ${ACUAN,,}:" "$([ "$SELISIH_NOL" = 1 ] && echo "NOL (OK)" || echo "BELUM NOL - JANGAN LANJUT")"
+    printf "   %-22s %s\n" "Daftar tabel:" "$([ -z "$KL_BEDA" ] && echo "SAMA (OK)" || echo "BEDA - PERIKSA")"
+    printf "   %-22s %s\n" "Sequence:" "$([ "${sq_beda:-0}" = 0 ] && echo "tidak tertinggal (OK)" || echo "$sq_beda tertinggal - PERIKSA")"
+    [ "$SELISIH_NOL" = 1 ] && [ -z "$KL_BEDA" ] && [ "${sq_beda:-0}" = 0 ] && echo "   KESIMPULAN CEPAT: cluster sudah memuat seluruh data ${ACUAN,,} -> boleh lanjut."
+  fi
+  [ "${sq_beda:-0}" -gt 0 ] && printf "   %-9s %s sequence tertinggal (lihat sequence-beda.txt)\n" "SEQUENCE" "$sq_beda"
+  if [ "${CEPAT:-0}" = 1 ]; then :
+  elif [ -z "${JML[BEDA]}${JML[GAGAL]}${JML[UNLOGGED]}${JML[AKTIF]}" ] && [ "${sq_beda:-0}" = 0 ]; then
+    echo "   SEMUA tabel yang dicek SAMA (jumlah dan isi) antara ${ACUAN,,} dan $([ "$ACUAN" = Pemimpin ] && echo replica || echo cluster)$([ -z "$TABEL_FILE" ] && echo ", sequence tidak tertinggal")."
   else
     [ -n "${JML[AKTIF]}" ] && echo "   AKTIF  : ulangi saat sepi / Hari-H setelah aplikasi berhenti:  TABEL_FILE=$HASIL/ulang.txt"
     [ -n "${JML[BEDA]}" ] && echo "   BEDA   : MASALAH - kirim $HASIL/hasil.csv"
@@ -206,6 +278,7 @@ hasil=$HASIL"
   fi
   [ -s "$HASIL/dilewati.txt" ] && echo "   Dilewati karena ukuran: $(wc -l < "$HASIL/dilewati.txt") tabel (lihat dilewati.txt)"
   echo "   Rincian: $HASIL/hasil.csv"
+  find "$(dirname "$HASIL")" -mindepth 1 -maxdepth 1 -type d -mtime +${SIMPAN_HARI:-60} -exec rm -rf {} + 2>/dev/null
 }
 
 if [ "$LATAR" = 1 ]; then
